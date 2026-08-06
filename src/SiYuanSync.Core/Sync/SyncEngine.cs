@@ -38,9 +38,10 @@ public sealed class SyncEngine
             return new SyncRunResult(runId, startedAt, DateTime.UtcNow, results);
         }
 
-        // 用当前快照的 serverUrl/token 构造 client，外层包重试装饰器
+        // 用当前快照的 serverUrl/token 构造 client（工厂是重试包装的唯一权威：
+        // 生产工厂已应用 RetryingSiyuanClient，测试注入裸 FakeClient，此处不再二次包装）
         var conn = new SiyuanConnectionConfig(snapshot.Siyuan.ServerUrl, snapshot.Siyuan.Token);
-        ISiyuanClient siyuan = new RetryingSiyuanClient(_clientFactory(conn));
+        ISiyuanClient siyuan = _clientFactory(conn);
 
         bool authFailed = false;
         int cancelledFromIndex = -1;
