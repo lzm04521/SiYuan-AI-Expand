@@ -1,4 +1,5 @@
 using Microsoft.Data.Sqlite;
+using SiYuanSync.Core.Models;
 
 namespace SiYuanSync.Core.State;
 
@@ -75,6 +76,56 @@ ON CONFLICT(project_name, rel_path) DO UPDATE SET
         cmd.Parameters.AddWithValue("@r", relPath);
         cmd.ExecuteNonQuery();
         tx.Commit();
+    }
+
+    public void RecordSyncRun(SyncRunRecord r)
+    {
+        using var c = OpenConnection();
+        using var tx = c.BeginTransaction();
+        using var cmd = c.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = @"
+INSERT INTO sync_run (run_id, started_at, finished_at, project_name,
+  success_count, skipped_count, failed_count, status, error)
+VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@st,@e);";
+        cmd.Parameters.AddWithValue("@run", r.RunId);
+        cmd.Parameters.AddWithValue("@s", r.StartedAt.ToString("O"));
+        cmd.Parameters.AddWithValue("@f", r.FinishedAt.ToString("O"));
+        cmd.Parameters.AddWithValue("@p", r.ProjectName);
+        cmd.Parameters.AddWithValue("@sc", r.SuccessCount);
+        cmd.Parameters.AddWithValue("@sk", r.SkippedCount);
+        cmd.Parameters.AddWithValue("@fc", r.FailedCount);
+        cmd.Parameters.AddWithValue("@st", r.Status.ToString());
+        cmd.Parameters.AddWithValue("@e", (object?)r.Error ?? DBNull.Value);
+        cmd.ExecuteNonQuery();
+        tx.Commit();
+    }
+
+    public IReadOnlyList<SyncRunRecord> GetLatestRunByRunId()
+    {
+        using var c = OpenConnection();
+        // 取 started_at 最大那条的 run_id，再取该 run_id 全部记录
+        using var latestCmd = c.CreateCommand();
+        latestCmd.CommandText = "SELECT run_id FROM sync_run ORDER BY started_at DESC LIMIT 1";
+        var runId = latestCmd.ExecuteScalar() as string;
+        if (runId is null) return Array.Empty<SyncRunRecord>();
+
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT run_id, started_at, finished_at, project_name, success_count, skipped_count, failed_count, status, error FROM sync_run WHERE run_id=@run ORDER BY project_name";
+        cmd.Parameters.AddWithValue("@run", runId);
+        var list = new List<SyncRunRecord>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new SyncRunRecord(
+                r.GetString(0),
+                DateTime.Parse(r.GetString(1), null, System.Globalization.DateTimeStyles.RoundtripKind),
+                DateTime.Parse(r.GetString(2), null, System.Globalization.DateTimeStyles.RoundtripKind),
+                r.GetString(3), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6),
+                Enum.Parse<RunStatus>(r.GetString(7)),
+                r.IsDBNull(8) ? null : r.GetString(8)));
+        }
+        return list;
     }
 
     public void Dispose() { }
