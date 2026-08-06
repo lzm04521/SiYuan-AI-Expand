@@ -1,6 +1,5 @@
 ﻿# uninstall.ps1 —— 需管理员权限
 # 停止并删除 Windows 服务；保留数据目录以便回滚或排查
-$ErrorActionPreference = 'SilentlyContinue'
 
 # --- 0. 管理员权限自检（sc.exe stop/delete 需要管理员） ---
 $principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -21,5 +20,5 @@ sc.exe delete SiYuan-AI-Expand
 
 Write-Host ""
 Write-Host "服务 SiYuan-AI-Expand 已停止并删除。"
-Write-Host "数据目录 $env:ProgramData\SiYuan-AI-Expand 已保留（含 config.json / state.db / logs）。"
+Write-Host "数据目录 ${env:ProgramData}\SiYuan-AI-Expand 已保留（含 config.json / state.db / logs）。"
 Write-Host "如需彻底清理，请手动删除该目录。"
