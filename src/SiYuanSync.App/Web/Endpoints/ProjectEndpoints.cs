@@ -58,26 +58,32 @@ public static class ProjectEndpoints
             if (p is null) throw new ApiException(404, "NOT_FOUND", $"项目 '{name}' 不存在", null);
 
             var siyuan = clientFactory(new(snap.Siyuan.ServerUrl, snap.Siyuan.Token));
-            var notebooks = await siyuan.ListNotebooksAsync(default);
-            var nbName = string.IsNullOrWhiteSpace(p.Notebook) ? snap.Siyuan.DefaultNotebook : p.Notebook;
-            var nb = notebooks.FirstOrDefault(n => n.Name == nbName) ?? throw new ApiException(400, "NOTEBOOK_MISSING", $"笔记本 '{nbName}' 不存在", null);
-
-            // 已存在？
-            var existing = await siyuan.GetDocIdsByHPathAsync(nb.Id, p.ParentPath, default);
-            if (existing.Count > 0) return Results.Json(new { ok = true, created = false, message = "思源中已存在" });
-
-            // 逐级创建（处理是否自动建中间层级的不确定性）
-            var segments = p.ParentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            var path = "";
-            string createdId = "";
-            foreach (var seg in segments)
+            try
             {
-                path += "/" + seg;
-                var ids = await siyuan.GetDocIdsByHPathAsync(nb.Id, path, default);
-                if (ids.Count == 0)
-                    createdId = await siyuan.CreateDocWithMdAsync(nb.Id, path, "", default);
+                var notebooks = await siyuan.ListNotebooksAsync(default);
+                var nbName = string.IsNullOrWhiteSpace(p.Notebook) ? snap.Siyuan.DefaultNotebook : p.Notebook;
+                var nb = notebooks.FirstOrDefault(n => n.Name == nbName) ?? throw new ApiException(400, "NOTEBOOK_MISSING", $"笔记本 '{nbName}' 不存在", null);
+
+                // 已存在？
+                var existing = await siyuan.GetDocIdsByHPathAsync(nb.Id, p.ParentPath, default);
+                if (existing.Count > 0) return Results.Json(new { ok = true, created = false, message = "思源中已存在" });
+
+                // 逐级创建（处理是否自动建中间层级的不确定性）
+                var segments = p.ParentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                var path = "";
+                string createdId = "";
+                foreach (var seg in segments)
+                {
+                    path += "/" + seg;
+                    var ids = await siyuan.GetDocIdsByHPathAsync(nb.Id, path, default);
+                    if (ids.Count == 0)
+                        createdId = await siyuan.CreateDocWithMdAsync(nb.Id, path, "", default);
+                }
+                return Results.Json(new { ok = true, created = true, docId = createdId });
             }
-            return Results.Json(new { ok = true, created = true, docId = createdId });
+            catch (ApiException) { throw; }
+            catch (SiyuanAuthException) { throw new ApiException(401, "AUTH", "token 或权限无效", null); }
+            catch (Exception ex) { throw new ApiException(502, "UNREACHABLE", "思源不可达", ex.Message); }
         });
     }
 }
