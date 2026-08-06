@@ -12,3 +12,6 @@ obj/
 TestResults/
 publish/
 *.log
+
+# 工具配置（本地）
+paseo.json
