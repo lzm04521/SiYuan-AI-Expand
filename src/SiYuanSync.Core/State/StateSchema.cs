@@ -27,6 +27,16 @@ CREATE TABLE IF NOT EXISTS sync_run (
 );
 CREATE INDEX IF NOT EXISTS idx_sync_run_run_id ON sync_run(run_id);";
 
+    public const string FileRunDetail = @"
+CREATE TABLE IF NOT EXISTS file_run_detail (
+  run_id TEXT NOT NULL,
+  project_name TEXT NOT NULL,
+  rel_path TEXT NOT NULL,
+  outcome TEXT NOT NULL,
+  error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_file_run_detail_run ON file_run_detail(run_id);";
+
     public const string EnableWal = "PRAGMA journal_mode=WAL;";
     public const string BusyTimeout = "PRAGMA busy_timeout=5000;";
 }

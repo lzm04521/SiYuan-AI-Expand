@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using SiYuanSync.App.Web;
 using SiYuanSync.App.Worker;
 using SiYuanSync.Core.Config;
+using SiYuanSync.Core.Models;
 using SiYuanSync.Core.Paths;
+using SiYuanSync.Core.Siyuan;
 using SiYuanSync.Core.State;
 using SiYuanSync.Core.Sync;
 
@@ -31,11 +33,18 @@ public static class HostBuilder
         var configStore = new ConfigStore(AppPaths.GetConfigPath());
         configStore.Initialize();
 
+        // clientFactory：每次调用产生独立的 ISiyuanClient。HttpClientHandler 不可共享
+        // （随 HttpClient dispose），故工厂内每次 new。
+        Func<SiyuanConnectionConfig, ISiyuanClient> clientFactory =
+            conn => new RetryingSiyuanClient(new SiyuanClient(new HttpClientHandler(), conn));
+
         hostBuilder.ConfigureServices(services =>
         {
             services.AddSingleton(configStore);
             services.AddSingleton<IStateStore>(_ => new StateStore(AppPaths.GetStateDbPath()));
+            services.AddSingleton(clientFactory);     // SyncEngine 依赖注入
             services.AddSingleton<SyncEngine>();
+            services.AddSingleton<RunCoordinator>();   // 立即同步的并发守卫
             services.AddHostedService<TimedSyncService>();
         });
 
