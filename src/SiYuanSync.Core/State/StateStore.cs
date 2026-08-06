@@ -23,6 +23,7 @@ public sealed class StateStore : IStateStore
         using (var cmd = c.CreateCommand()) { cmd.CommandText = StateSchema.BusyTimeout; cmd.ExecuteNonQuery(); }
         using (var cmd = c.CreateCommand()) { cmd.CommandText = StateSchema.FileSyncState; cmd.ExecuteNonQuery(); }
         using (var cmd = c.CreateCommand()) { cmd.CommandText = StateSchema.SyncRun; cmd.ExecuteNonQuery(); }
+        using (var cmd = c.CreateCommand()) { cmd.CommandText = StateSchema.FileRunDetail; cmd.ExecuteNonQuery(); }
     }
 
     internal SqliteConnection OpenConnection()
@@ -137,6 +138,50 @@ VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@st,@e);";
                 r.GetString(3), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6),
                 Enum.Parse<RunStatus>(r.GetString(7)),
                 r.IsDBNull(8) ? null : r.GetString(8)));
+        }
+        return list;
+    }
+
+    public void RecordFileDetails(string runId, string projectName, IEnumerable<FileResult> files)
+    {
+        using var c = OpenConnection();
+        using var tx = c.BeginTransaction();
+        foreach (var f in files)
+        {
+            using var cmd = c.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+INSERT INTO file_run_detail (run_id, project_name, rel_path, outcome, error)
+VALUES (@run, @p, @r, @o, @e);";
+            cmd.Parameters.AddWithValue("@run", runId);
+            cmd.Parameters.AddWithValue("@p", projectName);
+            cmd.Parameters.AddWithValue("@r", f.RelPath);
+            cmd.Parameters.AddWithValue("@o", f.Outcome.ToString());
+            cmd.Parameters.AddWithValue("@e", (object?)f.Error ?? DBNull.Value);
+            cmd.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+
+    public IReadOnlyList<FileRunDetail> GetFailedOrSkipped(string runId)
+    {
+        using var c = OpenConnection();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = @"
+SELECT project_name, rel_path, outcome, error FROM file_run_detail
+WHERE run_id=@run AND outcome <> @success
+ORDER BY project_name, rel_path;";
+        cmd.Parameters.AddWithValue("@run", runId);
+        cmd.Parameters.AddWithValue("@success", FileOutcome.Success.ToString());
+        var list = new List<FileRunDetail>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new FileRunDetail(
+                r.GetString(0),
+                r.GetString(1),
+                Enum.Parse<FileOutcome>(r.GetString(2)),
+                r.IsDBNull(3) ? null : r.GetString(3)));
         }
         return list;
     }

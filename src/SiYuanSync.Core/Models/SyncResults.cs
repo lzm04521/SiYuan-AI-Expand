@@ -9,6 +9,9 @@ public sealed record SyncRunRecord(
 
 public sealed record FileResult(string RelPath, FileOutcome Outcome, string? Error);
 
+/// <summary>file_run_detail 行：FileResult + 所属项目名（GET /api/status 用于按项目分组展示明细）。</summary>
+public sealed record FileRunDetail(string ProjectName, string RelPath, FileOutcome Outcome, string? Error);
+
 public sealed record ProjectRunResult(
     string ProjectName, RunStatus Status,
     int Success, int Skipped, int Failed,

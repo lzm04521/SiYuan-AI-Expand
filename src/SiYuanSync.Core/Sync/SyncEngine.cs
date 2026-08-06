@@ -114,6 +114,10 @@ public sealed class SyncEngine
                     pr.ProjectName, pr.Success, pr.Skipped, pr.Failed, pr.Status, pr.Error));
             }
             catch (Exception e) { _logger.LogError(e, "写入 sync_run 失败：{Project}", pr.ProjectName); }
+
+            // 文件级明细：失败/跳过文件供前端展开查看（成功文件只计数，但仍写入便于审计与排查）
+            try { _state.RecordFileDetails(runId, pr.ProjectName, pr.Files); }
+            catch (Exception e) { _logger.LogError(e, "写入 file_run_detail 失败：{Project}", pr.ProjectName); }
         }
         await Task.CompletedTask;
     }

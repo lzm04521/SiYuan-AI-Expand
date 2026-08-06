@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using SiYuanSync.App.Web.Endpoints;
 using SiYuanSync.App.Web.Errors;
 using SiYuanSync.Core.Config;
 using SiYuanSync.Core.Models;
 using SiYuanSync.Core.Siyuan;
+using SiYuanSync.Core.State;
 
 namespace SiYuanSync.App.Web;
 
@@ -80,16 +82,18 @@ public static class WebHostBuilder
             }));
 
             // 端点路由：需要 UseRouting 在前，UseEndpoints 注册所有 Map*/api/* 端点。
-            // clientFactory 为每次调用创建独立的 ISiyuanClient（HttpClientHandler 不可共享，
-            // 因为该 handler 会随 HttpClient 一起 dispose）。
-            var clientFactory = new Func<SiyuanConnectionConfig, ISiyuanClient>(conn =>
-                new RetryingSiyuanClient(new SiyuanClient(new HttpClientHandler(), conn)));
+            // clientFactory 与 RunCoordinator/IStateStore 均在 HostBuilder 注册为单例，这里从容器解析。
             app.UseRouting();
             app.UseEndpoints(ep =>
             {
+                var sp = ep.ServiceProvider;
+                var clientFactory = sp.GetRequiredService<Func<SiyuanConnectionConfig, ISiyuanClient>>();
                 ConfigEndpoints.Map(ep, config);
                 ProjectEndpoints.Map(ep, config, clientFactory);
                 SiyuanEndpoints.Map(ep, config, clientFactory);
+                SyncEndpoints.Map(ep,
+                    sp.GetRequiredService<RunCoordinator>(),
+                    sp.GetRequiredService<IStateStore>());
             });
 
             app.Run(async ctx =>
