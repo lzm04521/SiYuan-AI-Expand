@@ -4,8 +4,11 @@ using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
+using SiYuanSync.App.Web.Endpoints;
 using SiYuanSync.App.Web.Errors;
 using SiYuanSync.Core.Config;
+using SiYuanSync.Core.Models;
+using SiYuanSync.Core.Siyuan;
 
 namespace SiYuanSync.App.Web;
 
@@ -75,6 +78,19 @@ public static class WebHostBuilder
                 ctx.Response.ContentType = "text/plain";
                 await ctx.Response.WriteAsync("ok");
             }));
+
+            // 端点路由：需要 UseRouting 在前，UseEndpoints 注册所有 Map*/api/* 端点。
+            // clientFactory 为每次调用创建独立的 ISiyuanClient（HttpClientHandler 不可共享，
+            // 因为该 handler 会随 HttpClient 一起 dispose）。
+            var clientFactory = new Func<SiyuanConnectionConfig, ISiyuanClient>(conn =>
+                new RetryingSiyuanClient(new SiyuanClient(new HttpClientHandler(), conn)));
+            app.UseRouting();
+            app.UseEndpoints(ep =>
+            {
+                ConfigEndpoints.Map(ep, config);
+                ProjectEndpoints.Map(ep, config, clientFactory);
+                SiyuanEndpoints.Map(ep, config, clientFactory);
+            });
 
             app.Run(async ctx =>
             {
