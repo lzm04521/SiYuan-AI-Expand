@@ -1,8 +1,10 @@
 using System.Net;
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.FileProviders;
+using SiYuanSync.App.Web.Errors;
 using SiYuanSync.Core.Config;
 
 namespace SiYuanSync.App.Web;
@@ -28,12 +30,27 @@ public static class WebHostBuilder
         web.ConfigureServices(_ => { });
         web.Configure(app =>
         {
+            // 最外层：全局异常兜底（ApiException 走统一格式，其余 500 通用错误不泄露堆栈）
+            app.UseExceptionHandler(errApp => errApp.Run(async ctx =>
+            {
+                var ex = ctx.Features.Get<IExceptionHandlerFeature>()?.Error;
+                if (ex is ApiException ae)
+                    await ApiError.Write(ctx, ae.Status, ae.Code, ae.Message, ae.Details);
+                else
+                {
+                    ctx.Response.StatusCode = 500;
+                    await ctx.Response.WriteAsync("""{"code":"INTERNAL","message":"内部错误","details":null}""");
+                }
+            }));
+
             var asm = typeof(WebHostBuilder).Assembly;
             var fp = new ManifestEmbeddedFileProvider(asm, "Web/wwwroot");
             app.UseStaticFiles(new StaticFileOptions { FileProvider = fp, RequestPath = "" });
 
             var sessions = new SessionStore();
             var rate = new LoginRateLimiter();
+            // 顺序：CSRF/请求体限制 → 认证 → 路由
+            app.UseMiddleware<CsrfBodyLimitMiddleware>();
             app.UseMiddleware<WebAuthMiddleware>(sessions, rate, new Func<string>(() => config.GetSnapshot().Web.Password));
 
             // POST /api/login：限流 → 解析 password → 恒定时间比较 → 签发 session cookie。
