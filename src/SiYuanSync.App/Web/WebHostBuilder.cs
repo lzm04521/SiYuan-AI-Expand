@@ -32,6 +32,30 @@ public static class WebHostBuilder
             var fp = new ManifestEmbeddedFileProvider(asm, "Web/wwwroot");
             app.UseStaticFiles(new StaticFileOptions { FileProvider = fp, RequestPath = "" });
 
+            var sessions = new SessionStore();
+            var rate = new LoginRateLimiter();
+            app.UseMiddleware<WebAuthMiddleware>(sessions, rate, new Func<string>(() => config.GetSnapshot().Web.Password));
+
+            // POST /api/login：限流 → 解析 password → 恒定时间比较 → 签发 session cookie。
+            // 用 app.Map 分支与 /health 风格一致（项目未启用 endpoint routing）。
+            app.Map("/api/login", login => login.Run(async ctx =>
+            {
+                if (!HttpMethods.IsPost(ctx.Request.Method))
+                { ctx.Response.StatusCode = 405; return; }
+                var ip = ctx.Connection.RemoteIpAddress?.ToString() ?? "?";
+                if (!rate.TryConsume(ip)) { ctx.Response.StatusCode = 429; await ctx.Response.WriteAsync("""{"code":429,"message":"请求过于频繁","details":null}"""); return; }
+                using var sr = new StreamReader(ctx.Request.Body); var body = await sr.ReadToEndAsync();
+                string? pwd = null;
+                try { using var doc = System.Text.Json.JsonDocument.Parse(body); pwd = doc.RootElement.GetProperty("password").GetString(); } catch { }
+                var actual = config.GetSnapshot().Web.Password;
+                if (!WebAuthMiddleware.FixedTimeEquals(pwd ?? "", actual))
+                { ctx.Response.StatusCode = 401; await ctx.Response.WriteAsync("""{"code":401,"message":"用户名或密码错误","details":null}"""); return; }
+                var sid = sessions.Issue();
+                ctx.Response.Cookies.Append(WebAuthMiddleware.SessionCookie, sid, new CookieOptions { HttpOnly = true, SameSite = SameSiteMode.Strict, Expires = DateTimeOffset.UtcNow.AddHours(8) });
+                ctx.Response.ContentType = "application/json";
+                await ctx.Response.WriteAsync("""{"ok":true}""");
+            }));
+
             app.Map("/health", health => health.Run(async ctx =>
             {
                 ctx.Response.ContentType = "text/plain";
