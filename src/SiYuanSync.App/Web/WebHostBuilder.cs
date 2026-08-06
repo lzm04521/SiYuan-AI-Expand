@@ -37,10 +37,7 @@ public static class WebHostBuilder
                 if (ex is ApiException ae)
                     await ApiError.Write(ctx, ae.Status, ae.Code, ae.Message, ae.Details);
                 else
-                {
-                    ctx.Response.StatusCode = 500;
-                    await ctx.Response.WriteAsync("""{"code":"INTERNAL","message":"内部错误","details":null}""");
-                }
+                    await ApiError.Write(ctx, 500, "INTERNAL", "内部错误", null);
             }));
 
             var asm = typeof(WebHostBuilder).Assembly;
