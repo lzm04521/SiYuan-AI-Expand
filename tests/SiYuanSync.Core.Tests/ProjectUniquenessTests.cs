@@ -51,6 +51,16 @@ public class ProjectUniquenessTests
     }
 
     [Fact]
+    public void Nested_docPath_conflicts_reversed()
+    {
+        // 深路径列在前：原单向 IsSameOrAncestor(deeper, shallower) 返回 false 会漏判
+        var cfg = WithProjects(
+            P("A", @"D:\work\doc", "AI", "/A"),
+            P("B", @"D:\work", "AI", "/B"));
+        Assert.NotEmpty(ConfigValidator.Validate(cfg));
+    }
+
+    [Fact]
     public void Empty_notebook_falls_back_to_default_then_checked()
     {
         var cfg = WithProjects(

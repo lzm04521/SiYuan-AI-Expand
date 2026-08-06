@@ -62,7 +62,8 @@ public static class ConfigValidator
             for (int j = i + 1; j < normalized.Count; j++)
             {
                 var a = normalized[i]; var b = normalized[j];
-                if (IsSameOrAncestor(a.full, b.full))
+                // 双向检测父子关系，覆盖列表顺序无关的嵌套（深路径在前或在前均识别）
+                if (IsSameOrAncestor(a.full, b.full) || IsSameOrAncestor(b.full, a.full))
                     errors.Add($"项目 '{a.name}' 与 '{b.name}' 的 docPath 重叠：'{a.full}' ↔ '{b.full}'");
             }
 
