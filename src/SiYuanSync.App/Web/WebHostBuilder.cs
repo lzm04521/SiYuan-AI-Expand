@@ -49,7 +49,7 @@ public static class WebHostBuilder
             var fp = new ManifestEmbeddedFileProvider(asm, "Web/wwwroot");
             app.UseStaticFiles(new StaticFileOptions { FileProvider = fp, RequestPath = "" });
 
-            var sessions = new SessionStore();
+            var sessions = app.ApplicationServices.GetRequiredService<SessionStore>();
             var rate = new LoginRateLimiter();
             // 顺序：CSRF/请求体限制 → 认证 → 路由
             app.UseMiddleware<CsrfBodyLimitMiddleware>();
@@ -88,7 +88,7 @@ public static class WebHostBuilder
             {
                 var sp = ep.ServiceProvider;
                 var clientFactory = sp.GetRequiredService<Func<SiyuanConnectionConfig, ISiyuanClient>>();
-                ConfigEndpoints.Map(ep, config);
+                ConfigEndpoints.Map(ep, config, sessions);
                 ProjectEndpoints.Map(ep, config, clientFactory);
                 SiyuanEndpoints.Map(ep, config, clientFactory);
                 SyncEndpoints.Map(ep,
