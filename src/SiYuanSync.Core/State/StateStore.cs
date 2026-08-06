@@ -43,6 +43,19 @@ public sealed class StateStore : IStateStore
         return cmd.ExecuteScalar() as string;
     }
 
+    public IReadOnlyList<string> ListRelsByProject(string projectName)
+    {
+        using var c = OpenConnection();
+        using var cmd = c.CreateCommand();
+        cmd.CommandText = "SELECT rel_path FROM file_sync_state WHERE project_name=@p";
+        cmd.Parameters.AddWithValue("@p", projectName);
+        var list = new List<string>();
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(r.GetString(0));
+        return list;
+    }
+
     public void RecordFileSync(string projectName, string relPath, string hash, string? siyuanDocId, DateTime syncedAt)
     {
         using var c = OpenConnection();
