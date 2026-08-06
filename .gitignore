@@ -1,8 +1,14 @@
-# Build outputs
+# 工具自身的设计文档与本地产物（按约定不纳入版本管理）
+# 注：doc/部署说明.md 已纳入版本管理，.gitignore 不影响已跟踪文件
+/doc/
+
+# .NET 构建产物
 bin/
 obj/
+*.user
+.vs/
 
-# Test / publish / log artifacts
+# 测试 / 发布 / 日志产物
 TestResults/
 publish/
 *.log
