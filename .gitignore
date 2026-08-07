@@ -14,4 +14,6 @@ publish/
 *.log
 
 # 工具配置（本地）
+.claude/*
 paseo.json
+codegraph.json
