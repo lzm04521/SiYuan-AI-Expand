@@ -70,10 +70,11 @@ SiYuan-AI-Expand.exe（单文件自包含）
 # 1. 发布单文件自包含 exe（普通用户即可）
 .\publish.ps1
 
-# 2. 安装为 Windows 服务（管理员）
+# 2. 安装（脚本自动 admin 提权；优先用 NSSM 注册服务，本机无 NSSM 时改用计划任务；
+#    默认安装目录 E:\Software\FreeInstall\SiyuanExpand，Web 端口 61122，均可回车沿用上次/默认）
 .\install.ps1
 
-# 3. 浏览器访问 http://127.0.0.1:6807/ 完成首次配置
+# 3. 浏览器访问 http://127.0.0.1:61122/ 完成首次配置
 ```
 
 **首次配置流程（Web 配置页）：**
@@ -104,7 +105,7 @@ SiYuan-AI-Expand.exe（单文件自包含）
     "runOnStart": true
   },
   "web": {
-    "port": 6807,
+    "port": 61122,
     "bind": "127.0.0.1",
     "password": ""
   },
@@ -126,7 +127,7 @@ SiYuan-AI-Expand.exe（单文件自包含）
 
 ### Web 配置页
 
-浏览器访问 `http://127.0.0.1:6807/`，提供：思源连接（含测试连接）、同步设置（周期/启动即同步）、项目 CRUD、父目录初始化、立即全部同步、同步状态（成功/跳过/失败计数 + 文件级错误明细）。
+浏览器访问 `http://127.0.0.1:61122/`，提供：思源连接（含测试连接）、同步设置（周期/启动即同步）、项目 CRUD、父目录初始化、立即全部同步、同步状态（成功/跳过/失败计数 + 文件级错误明细）。
 
 ### 配置变更生效语义
 
@@ -167,7 +168,7 @@ Web 修改时 `ConfigStore` 先更新内存权威副本、再原子写回 `confi
 详见 `doc/部署说明.md`。要点：
 
 - **发布**：`.\publish.ps1` → 产物 `publish\SiYuan-AI-Expand.exe`（单文件自包含，内嵌运行时与 Web 静态资源）。
-- **安装/卸载**：`.\install.ps1` / `.\uninstall.ps1`（均需管理员）。安装时创建 `%ProgramData%\SiYuan-AI-Expand\` 并设 ACL（仅 `Administrators` + `SYSTEM` 完全控制，禁用继承），`sc.exe` 装服务并配失败恢复（首次 5s / 第二次 10s / 第三次起 30s 自动重启）。卸载保留数据目录便于回滚。
+- **安装/卸载**：`.\install.ps1` / `.\uninstall.ps1`（均自动 admin 提权）。安装时把 `publish\` 产物复制到安装目录（默认 `E:\Software\FreeInstall\SiyuanExpand`，记忆上次），创建 `%ProgramData%\SiYuan-AI-Expand\` 并设 ACL（仅 `Administrators` + `SYSTEM` 完全控制，禁用继承），把 Web 端口写入 `config.json`（默认 `61122`）。优先用 NSSM 注册服务（配 `AppExit Restart` + `sc.exe failure` 双层失败恢复）；本机无 NSSM 时改用计划任务（SYSTEM 身份、开机启动、异常退出 1 分钟后重启）。两种方式都会在 `%ProgramData%\SiYuan-AI-Expand\install-record.json` 记录安装目录/端口/方式，便于重装时自动沿用。卸载同时清理服务与计划任务，保留数据目录与安装目录便于回滚。
 - **权限**：服务默认以 `LocalSystem` 运行，自动满足数据目录写权限。改用域/本地账户需手动授予该账户对数据目录的写权限。
 - **非 loopback HTTP 风险**：`web.bind=0.0.0.0` 时纯 HTTP 无 TLS，凭据（思源 token、Web 密码、session cookie）明文传输。仅在受信任局域网开放，或通过反向代理提供 TLS 终结。合法 bind 取值：`127.0.0.1`、`localhost`、`0.0.0.0`、`::1`。
 - **故障排查**：Windows 事件查看器（来源 `SiYuan-AI-Expand`，Error 级，事件 ID 1=配置损坏 / 2=启动异常）→ `%ProgramData%\SiYuan-AI-Expand\logs\app-*.log` → `--console` 实时输出。
