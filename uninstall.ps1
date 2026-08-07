@@ -71,6 +71,18 @@ if (-not (Test-Admin)) {
     exit
 }
 
+# 提权窗口下任何未捕获异常先显示再暂停，避免窗口闪退看不到错误
+trap {
+    Write-Host ''
+    Write-Host '卸载失败：' -ForegroundColor Red
+    Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+        Write-Host "  位置：$($_.InvocationInfo.PositionMessage)" -ForegroundColor DarkGray
+    }
+    if ($Elevated) { Read-Host "`n按回车关闭窗口" }
+    exit 1
+}
+
 # 卸载逐项清理，单项失败不应中断后续清理
 $ErrorActionPreference = 'Continue'
 $ConfirmPreference     = 'None'

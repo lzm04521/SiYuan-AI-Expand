@@ -97,6 +97,18 @@ if (-not (Test-Admin)) {
     exit
 }
 
+# 提权窗口下任何未捕获异常先显示再暂停，避免窗口闪退看不到错误
+trap {
+    Write-Host ''
+    Write-Host '安装失败：' -ForegroundColor Red
+    Write-Host "  $($_.Exception.Message)" -ForegroundColor Red
+    if ($_.InvocationInfo -and $_.InvocationInfo.PositionMessage) {
+        Write-Host "  位置：$($_.InvocationInfo.PositionMessage)" -ForegroundColor DarkGray
+    }
+    if ($Elevated) { Read-Host "`n按回车关闭窗口" }
+    exit 1
+}
+
 $ErrorActionPreference = 'Stop'
 $ConfirmPreference     = 'None'   # 避免 Remove/Copy 等 cmdlet 弹确认
 Set-Location -LiteralPath $PSScriptRoot
