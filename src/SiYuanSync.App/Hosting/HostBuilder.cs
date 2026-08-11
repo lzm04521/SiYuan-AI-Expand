@@ -3,6 +3,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
+using SiYuanSync.App.Autostart;
+using SiYuanSync.App.Mcp;
 using SiYuanSync.App.Web;
 using SiYuanSync.App.Worker;
 using SiYuanSync.Core.Config;
@@ -23,9 +25,8 @@ public static class HostBuilder
         // 用 Host.CreateDefaultBuilder（IHostBuilder）而非 CreateApplicationBuilder，
         // 因为 .NET 10 下 ConfigureWebHost 扩展仅存在于 IHostBuilder，
         // 且 IWebHost 已过时（ASPDEPR008）：统一用 IHost 同时承载 worker 与 Kestrel。
+        // 仅托盘 / 控制台两种模式；不再作为 Windows 服务运行（UseWindowsService 已移除）。
         var hostBuilder = Host.CreateDefaultBuilder(args);
-        if (!console)
-            hostBuilder.UseWindowsService(o => o.ServiceName = "SiYuan-AI-Expand");
 
         hostBuilder.UseContentRoot(AppContext.BaseDirectory);
 
@@ -66,6 +67,10 @@ public static class HostBuilder
         Func<SiyuanConnectionConfig, ISiyuanClient> clientFactory =
             conn => new RetryingSiyuanClient(new SiyuanClient(new HttpClientHandler(), conn));
 
+        // 开机自启：主 exe 路径取自当前进程；Web 与托盘共用同一单例，统一读写 HKCU Run 键
+        var exePath = Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, AppConstants.MainExeName);
+        var autostart = new AutostartService(exePath);
+
         hostBuilder.ConfigureServices(services =>
         {
             services.AddSingleton(configStore);
@@ -74,7 +79,9 @@ public static class HostBuilder
             services.AddSingleton<SyncEngine>();
             services.AddSingleton<RunCoordinator>();   // 立即同步的并发守卫
             services.AddSingleton<SessionStore>();     // Web 会话：WebHostBuilder 与 ConfigEndpoints 共享同一实例（密码热更时 RevokeAll）
+            services.AddSingleton(autostart);          // 开机自启：SystemEndpoints 解析使用
             services.AddHostedService<TimedSyncService>();
+            services.AddHostedService<McpServerHostedService>(); // MCP server：独立 Kestrel，loopback
         });
 
         // Kestrel 子主机：与通用宿主同进程，bind/port 取自 configStore 快照。

@@ -25,6 +25,13 @@ public static class ConfigValidator
         if (!isLoopback && string.IsNullOrWhiteSpace(cfg.Web.Password))
             errors.Add("web.bind 为非 loopback 时 web.password 不得为空");
 
+        // Mcp.port
+        if (cfg.Mcp.Port < 1 || cfg.Mcp.Port > 65535)
+            errors.Add($"mcp.port 越界：{cfg.Mcp.Port}，须在 1-65535");
+        // MCP 端口不能与 Web 端口冲突（同一进程两个监听）
+        if (cfg.Mcp.Enabled && cfg.Mcp.Port == cfg.Web.Port)
+            errors.Add($"mcp.port 不能与 web.port 相同：{cfg.Mcp.Port}");
+
         // Sync.interval
         if (cfg.Sync.IntervalMinutes < 1)
             errors.Add($"sync.intervalMinutes 须 ≥ 1，当前 {cfg.Sync.IntervalMinutes}");

@@ -113,3 +113,42 @@ dialog form { display: flex; flex-direction: column; gap: .6rem; }
 dialog h3 { margin: 0 0 .5rem; font-size: 1rem; }
 .sub-table { width: 100%; font-size: .82rem; margin-top: .35rem; }
 .sub-table td { border-color: #eee; }
+
+/* Tab 导航：横贯 sticky，活动项下划线高亮 */
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+  padding: 0 1rem;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  flex-wrap: wrap;
+}
+.tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  color: #555;
+  padding: .7rem 1.2rem;
+  font-size: .92rem;
+  cursor: pointer;
+}
+.tab:hover { background: #f0f0f5; color: var(--primary); }
+.tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+.tab-panel.hidden { display: none; }
+
+/* 卡片内子分组（同步设置里的"思源连接 / 同步节奏"） */
+.subgroup {
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  padding: .5rem .8rem .75rem;
+  margin: 0 0 .75rem;
+}
+.subgroup legend {
+  font-size: .82rem;
+  color: var(--muted);
+  padding: 0 .35rem;
+  font-weight: 600;
+}

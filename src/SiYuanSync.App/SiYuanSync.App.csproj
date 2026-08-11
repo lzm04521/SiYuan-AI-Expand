@@ -1,11 +1,14 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
+    <OutputType>WinExe</OutputType>
+    <!-- WinForms 托盘 + 设置窗口需要 Windows TFM；覆盖 Directory.Build.props 的 net10.0 -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyName>SiYuan-AI-Expand</AssemblyName>
     <GenerateEmbeddedFilesManifest>true</GenerateEmbeddedFilesManifest>
+    <ApplicationIcon>..\..\app-icon.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" Version="9.0.0" />
     <PackageReference Include="Serilog.Extensions.Hosting" Version="8.0.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
@@ -15,6 +18,12 @@
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
     <EmbeddedResource Include="Web\wwwroot\**\*" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 托盘图标 + exe 文件图标：根目录 app-icon.ico（多尺寸） -->
+    <EmbeddedResource Include="..\..\app-icon.ico">
+      <Link>Resources\app-icon.ico</Link>
+    </EmbeddedResource>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\SiYuanSync.Core\SiYuanSync.Core.csproj" />

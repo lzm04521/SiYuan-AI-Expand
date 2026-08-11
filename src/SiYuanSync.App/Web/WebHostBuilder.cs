@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
+using SiYuanSync.App.Autostart;
 using SiYuanSync.App.Web.Endpoints;
 using SiYuanSync.App.Web.Errors;
 using SiYuanSync.Core.Config;
@@ -94,6 +95,7 @@ public static class WebHostBuilder
                 SyncEndpoints.Map(ep,
                     sp.GetRequiredService<RunCoordinator>(),
                     sp.GetRequiredService<IStateStore>());
+                SystemEndpoints.Map(ep, sp.GetRequiredService<AutostartService>());
             });
 
             app.Run(async ctx =>

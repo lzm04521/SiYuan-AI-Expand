@@ -12,77 +12,149 @@
     <span id="syncBadge" class="badge badge-idle">空闲</span>
   </header>
 
+  <nav class="tabs" id="tabs">
+    <button type="button" class="tab active" data-tab="sync">同步</button>
+    <button type="button" class="tab" data-tab="integrate">集成</button>
+    <button type="button" class="tab" data-tab="system">系统</button>
+  </nav>
+
   <main id="app">
-    <!-- 思源连接 -->
-    <section class="card">
-      <h2>思源连接</h2>
-      <div class="grid">
-        <label>Server URL
-          <input id="fServerUrl" type="text" placeholder="http://127.0.0.1:6806" autocomplete="off">
-        </label>
-        <label>Token
-          <input id="fToken" type="password" placeholder="未设置留空；已设置显示 ********" autocomplete="off">
-        </label>
-        <label>默认笔记本
-          <input id="fDefaultNotebook" type="text" placeholder="默认笔记本名" autocomplete="off">
-        </label>
-      </div>
-      <div class="actions">
-        <button id="btnSaveConfig" type="button">保存配置</button>
-        <button id="btnTestSiyuan" type="button" class="secondary">测试连接</button>
-      </div>
-      <p id="siyuanTestResult" class="muted" aria-live="polite"></p>
-    </section>
+    <!-- ========== 同步 ========== -->
+    <div class="tab-panel" data-panel="sync">
+      <!-- 同步设置：思源连接 + 同步节奏 -->
+      <section class="card">
+        <h2>同步设置</h2>
+        <fieldset class="subgroup">
+          <legend>思源连接</legend>
+          <div class="grid">
+            <label>Server URL
+              <input id="fServerUrl" type="text" placeholder="http://127.0.0.1:6806" autocomplete="off">
+            </label>
+            <label>Token
+              <input id="fToken" type="password" placeholder="未设置留空；已设置显示 ********" autocomplete="off">
+            </label>
+            <label>默认笔记本
+              <input id="fDefaultNotebook" type="text" placeholder="默认笔记本名" autocomplete="off">
+            </label>
+          </div>
+        </fieldset>
+        <fieldset class="subgroup">
+          <legend>同步节奏</legend>
+          <div class="grid">
+            <label>间隔（分钟）
+              <input id="fInterval" type="number" min="1" step="1">
+            </label>
+            <label class="checkbox">
+              <input id="fRunOnStart" type="checkbox">
+              启动时立即跑一轮
+            </label>
+          </div>
+        </fieldset>
+        <div class="actions">
+          <button id="btnSaveConfig" type="button">保存配置</button>
+          <button id="btnTestSiyuan" type="button" class="secondary">测试连接</button>
+        </div>
+        <p id="siyuanTestResult" class="muted" aria-live="polite"></p>
+      </section>
 
-    <!-- 同步设置 -->
-    <section class="card">
-      <h2>同步设置</h2>
-      <div class="grid">
-        <label>间隔（分钟）
-          <input id="fInterval" type="number" min="1" step="1">
-        </label>
-        <label class="checkbox">
-          <input id="fRunOnStart" type="checkbox">
-          启动时立即跑一轮
-        </label>
-      </div>
-    </section>
+      <!-- 项目列表 -->
+      <section class="card">
+        <h2>项目列表</h2>
+        <div class="actions">
+          <button id="btnAddProject" type="button">新增项目</button>
+          <button id="btnReloadProjects" type="button" class="secondary">刷新</button>
+        </div>
+        <table id="projectsTable" class="data">
+          <thead>
+            <tr>
+              <th>名称</th><th>启用</th><th>docPath</th><th>笔记本</th><th>父路径</th><th colspan="3">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
 
-    <!-- 项目列表 -->
-    <section class="card">
-      <h2>项目列表</h2>
-      <div class="actions">
-        <button id="btnAddProject" type="button">新增项目</button>
-        <button id="btnReloadProjects" type="button" class="secondary">刷新</button>
-      </div>
-      <table id="projectsTable" class="data">
-        <thead>
-          <tr>
-            <th>名称</th><th>启用</th><th>docPath</th><th>笔记本</th><th>父路径</th><th colspan="3">操作</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-    </section>
+      <!-- 立即同步 / 状态 -->
+      <section class="card">
+        <h2>立即同步 / 状态</h2>
+        <div class="actions">
+          <button id="btnRunSync" type="button">立即全部同步</button>
+          <button id="btnRefreshStatus" type="button" class="secondary">刷新状态</button>
+        </div>
+        <p id="syncRunResult" class="muted" aria-live="polite"></p>
+        <table id="statusTable" class="data">
+          <thead>
+            <tr>
+              <th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>状态</th><th>错误</th><th>明细</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="statusEmpty" class="muted">暂无同步记录</p>
+      </section>
+    </div>
 
-    <!-- 立即同步 / 状态 -->
-    <section class="card">
-      <h2>立即同步 / 状态</h2>
-      <div class="actions">
-        <button id="btnRunSync" type="button">立即全部同步</button>
-        <button id="btnRefreshStatus" type="button" class="secondary">刷新状态</button>
-      </div>
-      <p id="syncRunResult" class="muted" aria-live="polite"></p>
-      <table id="statusTable" class="data">
-        <thead>
-          <tr>
-            <th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>状态</th><th>错误</th><th>明细</th>
-          </tr>
-        </thead>
-        <tbody></tbody>
-      </table>
-      <p id="statusEmpty" class="muted">暂无同步记录</p>
-    </section>
+    <!-- ========== 集成 ========== -->
+    <div class="tab-panel hidden" data-panel="integrate">
+      <section class="card">
+        <h2>MCP 服务（Model Context Protocol）</h2>
+        <div class="grid">
+          <label class="checkbox">
+            <input id="fMcpEnabled" type="checkbox">
+            启用 MCP 服务
+          </label>
+          <label>MCP 端口
+            <input id="fMcpPort" type="number" min="1" max="65535" step="1">
+          </label>
+          <label>MCP 服务地址（端口/启用变更需重启程序）
+            <input id="fMcpUrl" type="text" readonly>
+          </label>
+        </div>
+        <div class="actions">
+          <button id="btnSaveMcp" type="button">保存 MCP 设置</button>
+        </div>
+        <p id="mcpSaveResult" class="muted" aria-live="polite"></p>
+        <p class="muted">供 AI 客户端（Claude Desktop / Cursor 等）调用，仅暴露"新增项目"工具，监听 127.0.0.1。Streamable HTTP：POST /mcp。</p>
+      </section>
+    </div>
+
+    <!-- ========== 系统 ========== -->
+    <div class="tab-panel hidden" data-panel="system">
+      <!-- 开机自启 -->
+      <section class="card">
+        <h2>开机自启</h2>
+        <div class="grid">
+          <label class="checkbox">
+            <input id="fAutostart" type="checkbox">
+            开机自动启动
+          </label>
+        </div>
+        <div class="actions">
+          <button id="btnSaveAutostart" type="button">保存</button>
+        </div>
+        <p id="autostartResult" class="muted" aria-live="polite"></p>
+        <p class="muted">登录 Windows 时自动启动本程序（写入注册表 HKCU\Software\Microsoft\Windows\CurrentVersion\Run）。仅 Windows 支持。</p>
+      </section>
+
+      <!-- 关于 -->
+      <section class="card">
+        <h2>关于</h2>
+        <div class="grid">
+          <label>当前版本
+            <input id="fVersion" type="text" readonly>
+          </label>
+          <label>仓库地址
+            <input id="fRepo" type="text" readonly>
+          </label>
+        </div>
+        <div class="actions">
+          <button id="btnCheckUpdate" type="button">检查更新</button>
+          <button id="btnApplyUpdate" type="button" class="secondary" disabled>应用更新</button>
+          <button id="btnOpenRepo" type="button" class="secondary">打开仓库</button>
+        </div>
+        <p id="updateResult" class="muted" aria-live="polite"></p>
+      </section>
+    </div>
 
     <!-- 项目编辑弹窗 -->
     <dialog id="projectDialog">

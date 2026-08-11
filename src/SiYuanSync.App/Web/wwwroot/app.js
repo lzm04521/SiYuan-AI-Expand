@@ -49,6 +49,9 @@ async function loadConfig() {
   $('fDefaultNotebook').value = data.siyuan?.defaultNotebook ?? '';
   $('fInterval').value = data.sync?.intervalMinutes ?? '';
   $('fRunOnStart').checked = !!data.sync?.runOnStart;
+  $('fMcpEnabled').checked = !!data.mcp?.enabled;
+  $('fMcpPort').value = data.mcp?.port ?? '';
+  updateMcpUrl();
 }
 
 async function saveConfig() {
@@ -79,6 +82,26 @@ async function testSiyuan() {
     setText('siyuanTestResult', `连接成功，笔记本：${list}`, 'muted');
   } else {
     setText('siyuanTestResult', `连接失败：${data?.message || data?.details || '未知错误'}`, 'err');
+  }
+}
+
+// ============== MCP 服务 ==============
+function updateMcpUrl() {
+  const port = $('fMcpPort').value || '61123';
+  $('fMcpUrl').value = `http://127.0.0.1:${port}/mcp`;
+}
+
+async function saveMcp() {
+  const body = {
+    mcpEnabled: $('fMcpEnabled').checked,
+    mcpPort: Number($('fMcpPort').value) || null,
+  };
+  const { ok, data } = await fetchJson('/api/config', { method: 'PUT', body });
+  if (ok) {
+    setText('mcpSaveResult', 'MCP 设置已保存（端口/启用变更需重启程序生效）', 'muted');
+    await loadConfig();
+  } else {
+    setText('mcpSaveResult', `保存失败：${data?.message || data}`, 'err');
   }
 }
 
@@ -278,21 +301,105 @@ function toggleDetails(tr, projectName, detailsByProject) {
   tr.parentNode.insertBefore(subRow, tr.nextSibling);
 }
 
+// ============== 关于 / 升级 ==============
+let _updateInfo = null;
+
+async function loadAbout() {
+  const { ok, data } = await fetchJson('/api/system/info');
+  if (!ok) return;
+  $('fVersion').value = data.version ?? '';
+  $('fRepo').value = data.repoUrl ?? '';
+}
+
+async function checkUpdate() {
+  $('btnCheckUpdate').disabled = true;
+  setText('updateResult', '检查中…', 'muted');
+  const { ok, data } = await fetchJson('/api/system/update/check', { method: 'POST' });
+  $('btnCheckUpdate').disabled = false;
+  if (!ok) {
+    setText('updateResult', `检查失败：${data?.error || data?.message || data}`, 'err');
+    return;
+  }
+  if (!data.hasUpdate) {
+    _updateInfo = null;
+    $('btnApplyUpdate').disabled = true;
+    setText('updateResult', `已是最新版本（${data.currentVersion}）。`, 'muted');
+    return;
+  }
+  _updateInfo = data;
+  $('btnApplyUpdate').disabled = false;
+  const sizeMb = (data.sizeBytes / 1024 / 1024).toFixed(1);
+  setText('updateResult', `发现新版本 ${data.latestVersion}（约 ${sizeMb} MB）。点击"应用更新"下载并重启升级。`, 'muted');
+}
+
+async function applyUpdate() {
+  if (!_updateInfo) return;
+  if (!confirm(`确认升级到 ${_updateInfo.latestVersion}？\n程序将下载升级包、退出并由升级程序重启。`)) return;
+  $('btnApplyUpdate').disabled = true;
+  setText('updateResult', '下载中，程序即将退出并重启…', 'muted');
+  const { ok, data } = await fetchJson('/api/system/update/apply', { method: 'POST' });
+  if (!ok) {
+    setText('updateResult', `升级失败：${data?.error || data?.message || data}`, 'err');
+    $('btnApplyUpdate').disabled = false;
+    return;
+  }
+  setText('updateResult', '升级已启动，程序即将重启，本页面会短暂不可用…', 'muted');
+}
+
+function openRepo() {
+  const url = $('fRepo').value;
+  if (url) window.open(url, '_blank');
+}
+
+// ============== 开机自启 ==============
+async function loadAutostart() {
+  const { ok, data } = await fetchJson('/api/system/autostart');
+  if (!ok) return;
+  $('fAutostart').disabled = !data.supported;
+  $('fAutostart').checked = !!data.enabled;
+  if (!data.supported) {
+    setText('autostartResult', '当前系统不支持开机自启（仅 Windows）。', 'muted');
+  }
+}
+
+async function saveAutostart() {
+  const enabled = $('fAutostart').checked;
+  const { ok, data } = await fetchJson('/api/system/autostart', { method: 'PUT', body: { enabled } });
+  if (ok && data.ok) {
+    setText('autostartResult', data.enabled ? '已开启开机自启。' : '已关闭开机自启。', 'muted');
+  } else {
+    setText('autostartResult', `保存失败：${data?.error || data?.message || data}`, 'err');
+  }
+}
+
+// ============== Tab 切换 ==============
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.toggle('hidden', p.dataset.panel !== name));
+}
+
 // ============== 事件绑定 + 启动 ==============
 function bindEvents() {
   $('btnSaveConfig').addEventListener('click', saveConfig);
   $('btnTestSiyuan').addEventListener('click', testSiyuan);
+  $('btnSaveMcp').addEventListener('click', saveMcp);
+  $('fMcpPort').addEventListener('input', updateMcpUrl);
   $('btnAddProject').addEventListener('click', () => openProjectDialog(null));
   $('btnReloadProjects').addEventListener('click', loadProjects);
   $('btnRunSync').addEventListener('click', runSync);
   $('btnRefreshStatus').addEventListener('click', loadStatus);
+  $('btnCheckUpdate').addEventListener('click', checkUpdate);
+  $('btnApplyUpdate').addEventListener('click', applyUpdate);
+  $('btnOpenRepo').addEventListener('click', openRepo);
+  $('btnSaveAutostart').addEventListener('click', saveAutostart);
+  document.querySelectorAll('.tab').forEach(b => b.addEventListener('click', () => switchTab(b.dataset.tab)));
   $('pCancel').addEventListener('click', () => $('projectDialog').close());
   $('pSave').addEventListener('click', saveProjectFromDialog);
 }
 
 async function init() {
   bindEvents();
-  await Promise.all([loadConfig(), loadProjects(), loadStatus()]);
+  await Promise.all([loadConfig(), loadProjects(), loadStatus(), loadAbout(), loadAutostart()]);
 }
 
 document.addEventListener('DOMContentLoaded', init);
