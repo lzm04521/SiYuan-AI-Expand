@@ -168,19 +168,19 @@ Web 管理页 → 系统 Tab → "开机自启"勾选，写入注册表 `HKCU\So
 
 1. Web 管理页 → 系统 Tab → 检查更新，查询 `releases/latest`，与本地版本（`Directory.Build.props` 的 `<Version>`）做语义版本比对。
 2. 发现新版本 → 确认下载升级包到 `%LocalAppData%\SiYuan-AI-Expand\update\` → 主程序退出 → `SiYuan-AI-Expand-Updater.exe` 解压覆盖安装目录 → 重启主程序。
-3. 升级包资产名约定 `SiYuan-AI-Expand-win-x64.zip`（含两个 exe，无目录前缀）；GitHub tag 用 `vX.Y.Z`。
+3. 升级包资产名约定 `SiYuan-AI-Expand-<version>-win-x64.zip`（含两个 exe，无目录前缀，`<version>` 来自 `Directory.Build.props`）；`UpdateChecker` 兼容旧固定名 `SiYuan-AI-Expand-win-x64.zip`。GitHub tag 用 `vX.Y.Z`。
 4. 跳过说明：升级时 `Updater.exe` 自身正在运行无法覆盖，会被跳过（其 apply 逻辑稳定，几乎不需要更新）。
 
 发布新版本流程：
 
 ```powershell
-.\publish.ps1                                  # 产出 publish\Siyuan-AI-Expand-win-x64.zip
+.\publish.ps1                                  # 产出 publish\SiYuan-AI-Expand-<version>-win-x64.zip
 git tag v0.2.1
 git push origin v0.2.1
-# GitHub 上以 v0.2.1 建 Release，把 SiYuan-AI-Expand-win-x64.zip 作为资产上传
+# push tag 后 GitHub Actions（.github/workflows/release.yml）自动构建 win-x64 产物并创建 Release
 ```
 
-发布后，已部署的旧版本在"设置 → 检查更新"即可发现并升级。
+发布后，已部署的旧版本在 Web 管理页 → 系统 Tab → 检查更新 即可发现并升级。
 
 ## 同步规则
 

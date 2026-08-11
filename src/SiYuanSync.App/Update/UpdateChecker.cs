@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Text.RegularExpressions;
 
 namespace SiYuanSync.App.Update;
 
@@ -55,14 +56,13 @@ public sealed class UpdateChecker : IDisposable
             var remote = ParseTag(rel.TagName);
             if (remote is null) return new UpdateCheckResult { Error = $"无法解析版本标签：{rel.TagName}" };
 
-            var asset = rel.Assets.FirstOrDefault(a =>
-                string.Equals(a.Name, _assetName, StringComparison.OrdinalIgnoreCase));
+            var asset = rel.Assets.FirstOrDefault(a => IsUpdateAsset(a.Name));
             if (asset is null)
             {
                 var avail = rel.Assets.Count == 0
                     ? "（Release 无任何资产）"
                     : string.Join(", ", rel.Assets.Select(a => a.Name));
-                return new UpdateCheckResult { Error = $"Release 未找到资产 {_assetName}，可用：{avail}" };
+                return new UpdateCheckResult { Error = $"Release 未找到升级资产，可用：{avail}" };
             }
 
             return new UpdateCheckResult
@@ -107,6 +107,17 @@ public sealed class UpdateChecker : IDisposable
             return ex.Message;
         }
     }
+
+    /// <summary>
+    /// 升级资产匹配：兼容新命名 SiYuan-AI-Expand-{ver}-win-x64.zip 与旧固定名 SiYuan-AI-Expand-win-x64.zip。
+    /// </summary>
+    private bool IsUpdateAsset(string name) =>
+        string.Equals(name, _assetName, StringComparison.OrdinalIgnoreCase) ||
+        VersionedAssetRe.IsMatch(name);
+
+    private static readonly Regex VersionedAssetRe = new(
+        @"^SiYuan-AI-Expand-\d+\.\d+\.\d+-win-x64\.zip$",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
     /// <summary>解析 v1.2.3 / V1.2.3 / 1.2.3 → Version；无法解析返回 null。</summary>
     public static Version? ParseTag(string tag)
