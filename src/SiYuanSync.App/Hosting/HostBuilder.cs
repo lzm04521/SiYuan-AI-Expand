@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 using SiYuanSync.App.Autostart;
-using SiYuanSync.App.Mcp;
 using SiYuanSync.App.Web;
 using SiYuanSync.App.Worker;
 using SiYuanSync.Core.Config;
@@ -81,7 +80,6 @@ public static class HostBuilder
             services.AddSingleton<SessionStore>();     // Web 会话：WebHostBuilder 与 ConfigEndpoints 共享同一实例（密码热更时 RevokeAll）
             services.AddSingleton(autostart);          // 开机自启：SystemEndpoints 解析使用
             services.AddHostedService<TimedSyncService>();
-            services.AddHostedService<McpServerHostedService>(); // MCP server：独立 Kestrel，loopback
         });
 
         // Kestrel 子主机：与通用宿主同进程，bind/port 取自 configStore 快照。

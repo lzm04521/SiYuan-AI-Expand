@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using SiYuanSync.App.Web;
 using SiYuanSync.Core.Config;
 using SiYuanSync.Core.Models;
 
@@ -16,8 +17,9 @@ internal sealed class McpToolException : Exception
 
 /// <summary>
 /// MCP（Model Context Protocol）端点：Streamable HTTP 形态（POST /mcp，JSON-RPC 2.0）。
-/// 协议版本 2025-06-18；仅无状态工具调用，不开 SSE 流。绕过 Web 管理台的会话/CSRF，
-/// 由独立 Kestrel 监听 loopback，供本机 AI 客户端（Claude Desktop / Cursor 等）接入。
+/// 协议版本 2025-06-18；仅无状态工具调用，不开 SSE 流。与 Web 管理台共用同一 Kestrel 端口，
+/// 靠路径 /mcp 区分；WebAuthMiddleware 对 loopback 来源免认证放行、端点内再硬校验来源为本机，
+/// 故即便 web.bind=0.0.0.0，外部也无法触达工具。供本机 AI 客户端（Claude Desktop / Cursor 等）接入。
 /// </summary>
 public static class McpEndpoints
 {
@@ -36,6 +38,15 @@ public static class McpEndpoints
 
     private static async Task HandleAsync(HttpContext ctx, ConfigStore config, string serverVersion)
     {
+        // 来源硬限制：仅本机可调用 MCP（与原独立 loopback Kestrel 等效）。
+        // web.bind=0.0.0.0 时端口虽对外开，此处直接拒绝非 loopback 来源，外部无法调用工具。
+        if (!WebAuthMiddleware.IsLoopback(ctx.Connection.RemoteIpAddress))
+        {
+            ctx.Response.StatusCode = 403;
+            await WriteAsync(ctx, Failure(null, -32600, "MCP 仅允许本机调用"));
+            return;
+        }
+
         JsonDocument doc;
         try { doc = await JsonDocument.ParseAsync(ctx.Request.Body); }
         catch

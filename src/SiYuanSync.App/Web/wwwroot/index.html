@@ -103,10 +103,7 @@
             <input id="fMcpEnabled" type="checkbox">
             启用 MCP 服务
           </label>
-          <label>MCP 端口
-            <input id="fMcpPort" type="number" min="1" max="65535" step="1">
-          </label>
-          <label>MCP 服务地址（端口/启用变更需重启程序）
+          <label>MCP 服务地址（与 Web 管理页共用端口；启用状态变更需重启程序）
             <input id="fMcpUrl" type="text" readonly>
           </label>
         </div>
@@ -114,7 +111,7 @@
           <button id="btnSaveMcp" type="button">保存 MCP 设置</button>
         </div>
         <p id="mcpSaveResult" class="muted" aria-live="polite"></p>
-        <p class="muted">供 AI 客户端（Claude Desktop / Cursor 等）调用，仅暴露"新增项目"工具，监听 127.0.0.1。Streamable HTTP：POST /mcp。</p>
+        <p class="muted">供 AI 客户端（Claude Desktop / Cursor 等）调用，仅暴露"新增项目"工具，与 Web 管理页共用同一端口，仅本机可调用。Streamable HTTP：POST /mcp。</p>
       </section>
     </div>
 

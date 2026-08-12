@@ -50,8 +50,7 @@ async function loadConfig() {
   $('fInterval').value = data.sync?.intervalMinutes ?? '';
   $('fRunOnStart').checked = !!data.sync?.runOnStart;
   $('fMcpEnabled').checked = !!data.mcp?.enabled;
-  $('fMcpPort').value = data.mcp?.port ?? '';
-  updateMcpUrl();
+  updateMcpUrl(data.web?.port);
 }
 
 async function saveConfig() {
@@ -86,19 +85,18 @@ async function testSiyuan() {
 }
 
 // ============== MCP 服务 ==============
-function updateMcpUrl() {
-  const port = $('fMcpPort').value || '61123';
+function updateMcpUrl(webPort) {
+  const port = webPort || 61122;
   $('fMcpUrl').value = `http://127.0.0.1:${port}/mcp`;
 }
 
 async function saveMcp() {
   const body = {
     mcpEnabled: $('fMcpEnabled').checked,
-    mcpPort: Number($('fMcpPort').value) || null,
   };
   const { ok, data } = await fetchJson('/api/config', { method: 'PUT', body });
   if (ok) {
-    setText('mcpSaveResult', 'MCP 设置已保存（端口/启用变更需重启程序生效）', 'muted');
+    setText('mcpSaveResult', 'MCP 设置已保存（启用状态变更需重启程序生效）', 'muted');
     await loadConfig();
   } else {
     setText('mcpSaveResult', `保存失败：${data?.message || data}`, 'err');
@@ -383,7 +381,6 @@ function bindEvents() {
   $('btnSaveConfig').addEventListener('click', saveConfig);
   $('btnTestSiyuan').addEventListener('click', testSiyuan);
   $('btnSaveMcp').addEventListener('click', saveMcp);
-  $('fMcpPort').addEventListener('input', updateMcpUrl);
   $('btnAddProject').addEventListener('click', () => openProjectDialog(null));
   $('btnReloadProjects').addEventListener('click', loadProjects);
   $('btnRunSync').addEventListener('click', runSync);

@@ -29,7 +29,6 @@ public static class ConfigEndpoints
                     c.Sync.RunOnStart = body.RunOnStart ?? c.Sync.RunOnStart;
                     c.Web.Password = body.WebPassword ?? c.Web.Password;
                     c.Mcp.Enabled = body.McpEnabled ?? c.Mcp.Enabled;
-                    c.Mcp.Port = body.McpPort ?? c.Mcp.Port;
                 });
                 var after = config.GetSnapshot().Web.Password;
                 if (!WebAuthMiddleware.FixedTimeEquals(before, after))
@@ -50,6 +49,5 @@ public static class ConfigEndpoints
         public bool? RunOnStart { get; set; }
         public string? WebPassword { get; set; }
         public bool? McpEnabled { get; set; }
-        public int? McpPort { get; set; }
     }
 }

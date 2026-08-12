@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.FileProviders;
 using SiYuanSync.App.Autostart;
+using SiYuanSync.App.Mcp;
 using SiYuanSync.App.Web.Endpoints;
 using SiYuanSync.App.Web.Errors;
 using SiYuanSync.Core.Config;
@@ -96,6 +97,11 @@ public static class WebHostBuilder
                     sp.GetRequiredService<RunCoordinator>(),
                     sp.GetRequiredService<IStateStore>());
                 SystemEndpoints.Map(ep, sp.GetRequiredService<AutostartService>());
+
+                // MCP：与 Web 共用同一 Kestrel，POST /mcp；启用时注册，仅 loopback 来源可调用。
+                // 端口取自 Web 配置，不再独立监听；enabled 变更需重启进程生效。
+                if (snap.Mcp.Enabled)
+                    McpEndpoints.Map(ep, config, AppVersion.CurrentString);
             });
 
             app.Run(async ctx =>
