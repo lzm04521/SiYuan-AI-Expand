@@ -13,7 +13,8 @@ public class ConfigSerializerTests
     {
         var cfg = new AppConfig
         {
-            Siyuan = { ServerUrl = "http://host:6806", Token = "tok", DefaultNotebook = "AI" },
+            Siyuan = { ServerUrl = "http://host:6806", Token = "tok", DefaultNotebook = "AI",
+                       AutoStartOnSync = true, ExePath = @"C:\Apps\SiYuan\SiYuan.exe" },
             Sync = { IntervalMinutes = 7, RunOnStart = false },
             Web = { Port = 7000, Bind = "0.0.0.0", Password = "pw" },
             Projects =
@@ -27,6 +28,8 @@ public class ConfigSerializerTests
 
         Assert.Equal("http://host:6806", back.Siyuan.ServerUrl);
         Assert.Equal("tok", back.Siyuan.Token);
+        Assert.True(back.Siyuan.AutoStartOnSync);
+        Assert.Equal(@"C:\Apps\SiYuan\SiYuan.exe", back.Siyuan.ExePath);
         Assert.Equal(7, back.Sync.IntervalMinutes);
         Assert.False(back.Sync.RunOnStart);
         Assert.Equal("0.0.0.0", back.Web.Bind);
@@ -39,5 +42,22 @@ public class ConfigSerializerTests
     public void Deserialize_invalid_json_throws()
     {
         Assert.ThrowsAny<JsonException>(() => ConfigSerializer.Deserialize("{ not json"));
+    }
+
+    [Fact]
+    public void Legacy_json_without_autostart_fields_gets_defaults()
+    {
+        // 升级前的 config.json 无 autoStartOnSync/exePath 字段：反序列化取默认值（关闭 + 自动搜索）
+        const string legacy = """
+            {"Siyuan":{"ServerUrl":"http://127.0.0.1:6806","Token":"t","DefaultNotebook":""},
+             "Sync":{"IntervalMinutes":10,"RunOnStart":true},
+             "Web":{"Port":61122,"Bind":"127.0.0.1","Password":""},
+             "Mcp":{"Enabled":false},"Projects":[]}
+            """;
+        var back = ConfigSerializer.Deserialize(legacy);
+
+        Assert.False(back.Siyuan.AutoStartOnSync);
+        Assert.Equal("", back.Siyuan.ExePath);
+        Assert.True(back.Sync.RunOnStart); // 既有字段仍正常读取
     }
 }

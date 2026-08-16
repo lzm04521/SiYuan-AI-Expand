@@ -36,6 +36,9 @@
             <label>默认笔记本
               <input id="fDefaultNotebook" type="text" placeholder="默认笔记本名" autocomplete="off">
             </label>
+            <label>思源 exe 路径
+              <input id="fSiyuanExePath" type="text" placeholder="留空自动搜索（NSIS / siyuan:// 协议 / Microsoft Store）" autocomplete="off">
+            </label>
           </div>
         </fieldset>
         <fieldset class="subgroup">
@@ -47,6 +50,10 @@
             <label class="checkbox">
               <input id="fRunOnStart" type="checkbox">
               启动时立即跑一轮
+            </label>
+            <label class="checkbox">
+              <input id="fAutoStartSiyuan" type="checkbox">
+              思源未运行时自动启动（隐藏窗口，就绪后同步）
             </label>
           </div>
         </fieldset>

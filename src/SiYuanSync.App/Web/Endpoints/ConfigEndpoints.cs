@@ -25,6 +25,9 @@ public static class ConfigEndpoints
                     c.Siyuan.ServerUrl = body.ServerUrl ?? c.Siyuan.ServerUrl;
                     c.Siyuan.Token = TokenMasking.PreserveOriginalIfMasked(body.Token ?? "", c.Siyuan.Token);
                     c.Siyuan.DefaultNotebook = body.DefaultNotebook ?? c.Siyuan.DefaultNotebook;
+                    c.Siyuan.AutoStartOnSync = body.AutoStartOnSync ?? c.Siyuan.AutoStartOnSync;
+                    // ExePath 特殊语义：空串 = 恢复自动搜索（须能清空），null = 未提交不改
+                    c.Siyuan.ExePath = body.SiyuanExePath is null ? c.Siyuan.ExePath : body.SiyuanExePath.Trim();
                     c.Sync.IntervalMinutes = body.IntervalMinutes ?? c.Sync.IntervalMinutes;
                     c.Sync.RunOnStart = body.RunOnStart ?? c.Sync.RunOnStart;
                     c.Web.Password = body.WebPassword ?? c.Web.Password;
@@ -45,6 +48,8 @@ public static class ConfigEndpoints
         public string? ServerUrl { get; set; }
         public string? Token { get; set; }
         public string? DefaultNotebook { get; set; }
+        public bool? AutoStartOnSync { get; set; }
+        public string? SiyuanExePath { get; set; }
         public int? IntervalMinutes { get; set; }
         public bool? RunOnStart { get; set; }
         public string? WebPassword { get; set; }

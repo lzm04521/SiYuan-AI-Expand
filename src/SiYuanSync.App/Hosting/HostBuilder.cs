@@ -76,6 +76,7 @@ public static class HostBuilder
             services.AddSingleton<IStateStore>(_ => new StateStore(AppPaths.GetStateDbPath()));
             services.AddSingleton(clientFactory);     // SyncEngine 依赖注入
             services.AddSingleton<SyncEngine>();
+            services.AddSingleton<SiYuanSync.App.Siyuan.SiyuanAutoStartService>(); // 同步前自动拉起思源
             services.AddSingleton<RunCoordinator>();   // 立即同步的并发守卫
             services.AddSingleton<SessionStore>();     // Web 会话：WebHostBuilder 与 ConfigEndpoints 共享同一实例（密码热更时 RevokeAll）
             services.AddSingleton(autostart);          // 开机自启：SystemEndpoints 解析使用

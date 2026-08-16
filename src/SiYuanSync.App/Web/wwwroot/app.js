@@ -47,8 +47,10 @@ async function loadConfig() {
   $('fToken').value = '';
   $('fToken').placeholder = data.siyuan?.hasToken ? MASK : '未设置（留空）';
   $('fDefaultNotebook').value = data.siyuan?.defaultNotebook ?? '';
+  $('fSiyuanExePath').value = data.siyuan?.exePath ?? '';
   $('fInterval').value = data.sync?.intervalMinutes ?? '';
   $('fRunOnStart').checked = !!data.sync?.runOnStart;
+  $('fAutoStartSiyuan').checked = !!data.siyuan?.autoStartOnSync;
   $('fMcpEnabled').checked = !!data.mcp?.enabled;
   updateMcpUrl(data.web?.port);
 }
@@ -57,6 +59,8 @@ async function saveConfig() {
   const body = {
     serverUrl: $('fServerUrl').value.trim() || null,
     defaultNotebook: $('fDefaultNotebook').value.trim() || null,
+    siyuanExePath: $('fSiyuanExePath').value.trim(), // 空串=恢复自动搜索，须原样发送不能用 || null
+    autoStartOnSync: $('fAutoStartSiyuan').checked,
     intervalMinutes: Number($('fInterval').value) || null,
     runOnStart: $('fRunOnStart').checked,
   };

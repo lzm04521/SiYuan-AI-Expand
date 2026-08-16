@@ -1,0 +1,82 @@
+using SiYuanSync.Core.Siyuan;
+using Xunit;
+
+namespace SiYuanSync.Core.Tests;
+
+public class SiyuanAutoStartTests
+{
+    private static SiyuanAutoStart New() => new(pollInterval: TimeSpan.FromMilliseconds(1));
+
+    [Fact]
+    public async Task Already_running_skips_launch()
+    {
+        int launches = 0, probes = 0;
+        var ok = await New().EnsureRunningAsync(
+            probe: _ => { probes++; return Task.FromResult(true); },
+            launch: () => launches++,
+            maxPolls: 5);
+
+        Assert.True(ok);
+        Assert.Equal(0, launches);
+        Assert.Equal(1, probes);
+    }
+
+    [Fact]
+    public async Task Not_running_launches_then_polls_until_ready()
+    {
+        int launches = 0, probes = 0;
+        // 探测序列：初始不可用 → 启动后第 3 次轮询才就绪
+        var ok = await New().EnsureRunningAsync(
+            probe: _ => { probes++; return Task.FromResult(probes >= 4); },
+            launch: () => launches++,
+            maxPolls: 5);
+
+        Assert.True(ok);
+        Assert.Equal(1, launches);
+        Assert.Equal(4, probes); // 1 次初始 + 3 次轮询
+    }
+
+    [Fact]
+    public async Task Not_ready_after_all_polls_returns_false()
+    {
+        int launches = 0, probes = 0;
+        var ok = await New().EnsureRunningAsync(
+            probe: _ => { probes++; return Task.FromResult(false); },
+            launch: () => launches++,
+            maxPolls: 5);
+
+        Assert.False(ok);
+        Assert.Equal(1, launches);
+        Assert.Equal(6, probes); // 1 次初始 + 5 次轮询
+    }
+
+    [Fact]
+    public async Task Launch_exception_propagates()
+    {
+        // 启动失败（如找不到 exe）必须向上抛，由调用方记录日志并判失败，不得静默当作已就绪
+        await Assert.ThrowsAsync<InvalidOperationException>(() => New().EnsureRunningAsync(
+            probe: _ => Task.FromResult(false),
+            launch: () => throw new InvalidOperationException("未找到思源 exe"),
+            maxPolls: 5));
+    }
+
+    [Fact]
+    public async Task Cancellation_during_polling_propagates()
+    {
+        using var cts = new CancellationTokenSource(10);
+        // 探测一直不可用 + 轮询间隔长于取消时限 → Task.Delay 取消
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new SiyuanAutoStart(
+            pollInterval: TimeSpan.FromSeconds(30)).EnsureRunningAsync(
+            probe: _ => Task.FromResult(false),
+            launch: () => { },
+            cts.Token,
+            maxPolls: 5));
+    }
+
+    [Fact]
+    public void Defaults_are_5_polls_every_30_seconds()
+    {
+        Assert.Equal(5, SiyuanAutoStart.DefaultMaxPolls);
+        Assert.Equal(TimeSpan.FromSeconds(30), SiyuanAutoStart.DefaultPollInterval);
+    }
+}
