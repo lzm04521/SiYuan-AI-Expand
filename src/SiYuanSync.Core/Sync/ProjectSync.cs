@@ -30,14 +30,19 @@ public static class ProjectSync
         var nb = notebooks.FirstOrDefault(n => n.Name == project.Notebook);
         if (nb is null) return Failed(project, $"笔记本 '{project.Notebook}' 不存在或已关闭", files, 0, 0, 0);
 
-        // 3. parentPath 存在
+        // 3. parentPath 规范化 + 存在校验
+        string parentPath;
+        try { parentPath = PathNormalizer.NormalizeParentPath(project.ParentPath); }
+        catch (PathNormalizerException e)
+        { return Failed(project, $"parentPath 无效：{e.Message}", files, 0, 0, 0); }
+
         IReadOnlyList<string> parentIds;
-        try { parentIds = await siyuan.GetDocIdsByHPathAsync(nb.Id, project.ParentPath, ct); }
+        try { parentIds = await siyuan.GetDocIdsByHPathAsync(nb.Id, parentPath, ct); }
         catch (SiyuanAuthException e) { return Failed(project, $"鉴权失败：{e.Message}", files, 0, 0, 0); }
         catch (Exception e) { return Failed(project, $"校验父目录失败：{e.Message}", files, 0, 0, 0); }
 
         if (parentIds.Count == 0)
-            return Failed(project, $"思源中父目录 '{project.ParentPath}' 不存在，请先点[同步创建父目录]", files, 0, 0, 0);
+            return Failed(project, $"思源中父目录 '{parentPath}' 不存在，请先点[同步创建父目录]", files, 0, 0, 0);
 
         // 4. 扫描
         ScanResult scan;
@@ -61,7 +66,7 @@ public static class ProjectSync
             try
             {
                 string hpath;
-                try { hpath = PathNormalizer.RelPathToHPath(project.ParentPath, rel); }
+                try { hpath = PathNormalizer.RelPathToHPath(parentPath, rel); }
                 catch (PathNormalizerException e)
                 { files.Add(new FileResult(rel, FileOutcome.Failed, e.Message)); failed++; continue; }
 

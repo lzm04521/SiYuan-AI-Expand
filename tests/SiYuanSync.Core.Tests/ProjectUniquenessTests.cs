@@ -79,4 +79,26 @@ public class ProjectUniquenessTests
             P("JPT", @"D:\b\doc", "AI", "/B"));
         Assert.Contains(ConfigValidator.Validate(cfg), e => e.Contains("name", StringComparison.OrdinalIgnoreCase));
     }
+
+    [Fact]
+    public void ParentPath_without_leading_slash_rejected_with_hint()
+    {
+        var cfg = WithProjects(P("A", @"D:\a\doc", "AI", "杰普特"));
+        Assert.Contains(ConfigValidator.Validate(cfg),
+            e => e.Contains("parentPath 不规范") && e.Contains("'/杰普特'"));
+    }
+
+    [Fact]
+    public void ParentPath_trailing_slash_rejected()
+    {
+        var cfg = WithProjects(P("A", @"D:\a\doc", "AI", "/A/"));
+        Assert.Contains(ConfigValidator.Validate(cfg), e => e.Contains("parentPath 不规范"));
+    }
+
+    [Fact]
+    public void Empty_parentPath_allowed_for_mcp_intermediate_state()
+    {
+        var cfg = WithProjects(P("A", @"D:\a\doc", "AI", ""));
+        Assert.Empty(ConfigValidator.Validate(cfg));
+    }
 }

@@ -1,4 +1,5 @@
 using SiYuanSync.Core.Models;
+using SiYuanSync.Core.Sync;
 
 namespace SiYuanSync.Core.Config;
 
@@ -38,6 +39,20 @@ public static class ConfigValidator
             .Where(g => g.Count() > 1 && !string.IsNullOrWhiteSpace(g.Key)).ToList();
         foreach (var g in dupNames)
             errors.Add($"项目 name 重复：'{g.Key}'");
+
+        // parentPath：空允许（MCP add_project 的中间态）；非空必须是规范 hpath（与思源 getIDsByHPath 精确匹配一致）
+        foreach (var p in cfg.Projects)
+        {
+            if (string.IsNullOrWhiteSpace(p.ParentPath)) continue;
+            try
+            {
+                var norm = PathNormalizer.NormalizeParentPath(p.ParentPath);
+                if (norm != p.ParentPath)
+                    errors.Add($"项目 '{p.Name}' parentPath 不规范：'{p.ParentPath}'，应为 '{norm}'");
+            }
+            catch (PathNormalizerException e)
+            { errors.Add($"项目 '{p.Name}' parentPath 非法：{e.Message}"); }
+        }
 
         // (notebook, parentPath) 唯一；notebook 空白回退 defaultNotebook
         string DefaultNb() => string.IsNullOrWhiteSpace(cfg.Siyuan.DefaultNotebook) ? "" : cfg.Siyuan.DefaultNotebook.Trim();

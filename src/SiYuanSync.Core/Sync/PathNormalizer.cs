@@ -16,6 +16,18 @@ public static class PathNormalizer
         return full;
     }
 
+    /// <summary>规范化 parentPath：去首尾空白与多余斜杠、补前导 /，段复用 NormalizeSegment 校验。空值抛异常。</summary>
+    public static string NormalizeParentPath(string raw)
+    {
+        var segments = (raw ?? "").Trim().Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0)
+            throw new PathNormalizerException($"parentPath 为空或非法：'{raw}'");
+        var sb = new StringBuilder();
+        foreach (var seg in segments)
+            sb.Append('/').Append(NormalizeSegment(seg));
+        return sb.ToString();
+    }
+
     public static string RelPathToHPath(string parentPath, string relPath)
     {
         var parent = (parentPath ?? "").Trim().TrimEnd('/');

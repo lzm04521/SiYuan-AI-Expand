@@ -5,6 +5,7 @@ using SiYuanSync.App.Web.Errors;
 using SiYuanSync.Core.Config;
 using SiYuanSync.Core.Models;
 using SiYuanSync.Core.Siyuan;
+using SiYuanSync.Core.Sync;
 
 namespace SiYuanSync.App.Web.Endpoints;
 
@@ -60,16 +61,20 @@ public static class ProjectEndpoints
             var siyuan = clientFactory(new(snap.Siyuan.ServerUrl, snap.Siyuan.Token));
             try
             {
+                string parentPath;
+                try { parentPath = PathNormalizer.NormalizeParentPath(p.ParentPath); }
+                catch (PathNormalizerException e) { throw new ApiException(400, "VALIDATION", "parentPath 无效", e.Message); }
+
                 var notebooks = await siyuan.ListNotebooksAsync(default);
                 var nbName = string.IsNullOrWhiteSpace(p.Notebook) ? snap.Siyuan.DefaultNotebook : p.Notebook;
                 var nb = notebooks.FirstOrDefault(n => n.Name == nbName) ?? throw new ApiException(400, "NOTEBOOK_MISSING", $"笔记本 '{nbName}' 不存在", null);
 
                 // 已存在？
-                var existing = await siyuan.GetDocIdsByHPathAsync(nb.Id, p.ParentPath, default);
+                var existing = await siyuan.GetDocIdsByHPathAsync(nb.Id, parentPath, default);
                 if (existing.Count > 0) return Results.Json(new { ok = true, created = false, message = "思源中已存在" });
 
                 // 逐级创建（处理是否自动建中间层级的不确定性）
-                var segments = p.ParentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                var segments = parentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 var path = "";
                 string createdId = "";
                 foreach (var seg in segments)

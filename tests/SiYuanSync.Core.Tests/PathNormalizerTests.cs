@@ -6,6 +6,24 @@ namespace SiYuanSync.Core.Tests;
 
 public class PathNormalizerTests
 {
+    [Theory]
+    [InlineData("杰普特", "/杰普特")]
+    [InlineData("/杰普特/", "/杰普特")]
+    [InlineData(" /杰普特//子目录/ ", "/杰普特/子目录")]
+    public void NormalizeParentPath_fixes_slash_variants(string raw, string expected)
+        => Assert.Equal(expected, PathNormalizer.NormalizeParentPath(raw));
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData("///")]
+    public void NormalizeParentPath_rejects_empty(string raw)
+        => Assert.Throws<PathNormalizerException>(() => PathNormalizer.NormalizeParentPath(raw));
+
+    [Fact]
+    public void NormalizeParentPath_rejects_dotdot_segment()
+        => Assert.Throws<PathNormalizerException>(() => PathNormalizer.NormalizeParentPath("/a/../b"));
+
     [Fact]
     public void RelPath_maps_to_hpath()
         => Assert.Equal("/JPT/feat-login/方案",

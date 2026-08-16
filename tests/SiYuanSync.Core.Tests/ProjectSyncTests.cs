@@ -102,6 +102,29 @@ public class ProjectSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task ParentPath_without_leading_slash_normalized_then_syncs()
+    {
+        // 回归：parentPath 缺前导 / 时曾导致"父目录不存在"死循环（init-parent 创建的是 /JPT，校验查的是 JPT）
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var result = await ProjectSync.RunAsync(Project("JPT"), spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Success, result.Status);
+        Assert.Contains("/JPT/a", spy.CreatedHPaths);
+    }
+
+    [Fact]
+    public async Task Empty_parentPath_marks_project_failed()
+    {
+        Md("a.md", "# A\n");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") } };
+        using var state = new StateStore(_dbPath);
+        var result = await ProjectSync.RunAsync(Project(""), spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Failed, result.Status);
+        Assert.Contains("parentPath", result.Error!);
+    }
+
+    [Fact]
     public async Task Auth_failure_stops_project_and_marks_failed()
     {
         Md("a.md", "# A\n");
