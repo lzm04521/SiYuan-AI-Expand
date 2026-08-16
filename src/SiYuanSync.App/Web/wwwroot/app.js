@@ -120,6 +120,7 @@ async function loadProjects() {
 function renderProjects() {
   const tbody = $('projectsTable').querySelector('tbody');
   tbody.innerHTML = '';
+  fillLogProjectOptions();
   if (_projects.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" class="muted">暂无项目，点击"新增项目"</td></tr>';
     return;
@@ -303,6 +304,99 @@ function toggleDetails(tr, projectName, detailsByProject) {
   tr.parentNode.insertBefore(subRow, tr.nextSibling);
 }
 
+// ============== 同步日志 ==============
+const LOG_PAGE = 20;
+// 文件级结果中文标签；Success 为旧数据（未区分新建/更新）
+const OUTCOME_LABEL = { Created: '新建', Updated: '更新', Skipped: '跳过', Failed: '失败', Success: '成功' };
+let _logOffset = 0;
+
+function fillLogProjectOptions() {
+  const sel = $('logProject');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">全部</option>' +
+    _projects.map(p => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}</option>`).join('');
+  sel.value = cur;
+}
+
+async function loadLog(reset) {
+  if (reset) {
+    _logOffset = 0;
+    $('logTable').querySelector('tbody').innerHTML = '';
+    $('logEmpty').hidden = true;
+    $('logEmpty').className = 'muted';
+  }
+  const q = new URLSearchParams();
+  if ($('logProject').value) q.set('project', $('logProject').value);
+  if ($('logFrom').value) q.set('from', $('logFrom').value);
+  if ($('logTo').value) q.set('to', $('logTo').value);
+  q.set('limit', LOG_PAGE);
+  q.set('offset', _logOffset);
+
+  const { ok, data } = await fetchJson(`/api/sync/history?${q}`);
+  if (!ok) {
+    setText('logEmpty', `加载失败：${data?.message || data}`, 'err');
+    $('logEmpty').hidden = false;
+    $('btnMoreLog').hidden = true;
+    return;
+  }
+  const tbody = $('logTable').querySelector('tbody');
+  const runs = data.runs || [];
+  for (const run of runs) {
+    for (const p of run.projects) {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(p.project)}</td>
+        <td>${escapeHtml(fmtDate(p.startedAt))}</td>
+        <td>${p.success}</td>
+        <td>${p.skipped}</td>
+        <td>${p.failed}</td>
+        <td><span class="status-${escapeHtml(p.status)}">${escapeHtml(p.status)}</span></td>
+        <td>${escapeHtml(p.error || '')}</td>
+        <td><button type="button" class="secondary" data-act="logtoggle">展开</button></td>
+      `;
+      tr.querySelector('[data-act="logtoggle"]').addEventListener('click', () => toggleLogDetails(tr, run.runId, p.project));
+      tbody.appendChild(tr);
+    }
+  }
+  _logOffset += LOG_PAGE;
+  if (tbody.children.length === 0) {
+    $('logEmpty').hidden = false;
+    $('btnMoreLog').hidden = true;
+  } else {
+    $('btnMoreLog').hidden = !data.hasMore;
+  }
+}
+
+async function toggleLogDetails(tr, runId, project) {
+  const existing = tr.nextSibling;
+  if (existing && existing.classList && existing.classList.contains('sub-row')) {
+    existing.remove();
+    return;
+  }
+  const { ok, data } = await fetchJson(`/api/sync/history/${encodeURIComponent(runId)}/details`);
+  if (!ok) {
+    alert(`加载明细失败：${data?.message || data}`);
+    return;
+  }
+  const files = (data.details || []).filter(d => d.project === project);
+  const rowsHtml = files.length
+    ? files.map(f => `<tr class="row-${escapeHtml(f.outcome)}">
+        <td><code>${escapeHtml(f.relPath)}</code></td>
+        <td><span class="outcome-${escapeHtml(f.outcome)}">${escapeHtml(OUTCOME_LABEL[f.outcome] || f.outcome)}</span></td>
+        <td>${escapeHtml(f.error || '')}</td>
+      </tr>`).join('')
+    : '<tr><td colspan="3" class="muted">无文件级明细（项目整体失败）</td></tr>';
+  const subRow = document.createElement('tr');
+  subRow.classList.add('sub-row');
+  subRow.innerHTML = `<td colspan="8">
+    <table class="sub-table">
+      <thead><tr><th>相对路径</th><th>结果</th><th>错误</th></tr></thead>
+      <tbody>${rowsHtml}</tbody>
+    </table>
+  </td>`;
+  tr.parentNode.insertBefore(subRow, tr.nextSibling);
+}
+
 // ============== 关于 / 升级 ==============
 let _updateInfo = null;
 
@@ -389,6 +483,8 @@ function bindEvents() {
   $('btnReloadProjects').addEventListener('click', loadProjects);
   $('btnRunSync').addEventListener('click', runSync);
   $('btnRefreshStatus').addEventListener('click', loadStatus);
+  $('btnQueryLog').addEventListener('click', () => loadLog(true));
+  $('btnMoreLog').addEventListener('click', () => loadLog(false));
   $('btnCheckUpdate').addEventListener('click', checkUpdate);
   $('btnApplyUpdate').addEventListener('click', applyUpdate);
   $('btnOpenRepo').addEventListener('click', openRepo);
@@ -400,7 +496,7 @@ function bindEvents() {
 
 async function init() {
   bindEvents();
-  await Promise.all([loadConfig(), loadProjects(), loadStatus(), loadAbout(), loadAutostart()]);
+  await Promise.all([loadConfig(), loadProjects(), loadStatus(), loadAbout(), loadAutostart(), loadLog(true)]);
 }
 
 document.addEventListener('DOMContentLoaded', init);

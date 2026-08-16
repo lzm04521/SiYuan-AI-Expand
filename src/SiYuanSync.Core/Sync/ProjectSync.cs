@@ -91,7 +91,9 @@ public static class ProjectSync
                 catch (Exception e)
                 { files.Add(new FileResult(rel, FileOutcome.Failed, $"状态写入失败（思源已成功，下轮将重推）：{e.Message}")); failed++; continue; }
 
-                files.Add(new FileResult(rel, FileOutcome.Success, null));
+                // 记录成功方式：新建 vs 更新（Rebuilt 删旧重建也归为更新），供同步日志展示
+                files.Add(new FileResult(rel,
+                    upsert.Mode == UpsertMode.Created ? FileOutcome.Created : FileOutcome.Updated, null));
                 ok++;
             }
             catch (SiyuanAuthException e)

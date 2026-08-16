@@ -128,19 +128,51 @@ VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@st,@e);";
         cmd.CommandText = "SELECT run_id, started_at, finished_at, project_name, success_count, skipped_count, failed_count, status, error FROM sync_run WHERE run_id=@run ORDER BY project_name";
         cmd.Parameters.AddWithValue("@run", runId);
         var list = new List<SyncRunRecord>();
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-        {
-            list.Add(new SyncRunRecord(
-                r.GetString(0),
-                DateTime.Parse(r.GetString(1), null, System.Globalization.DateTimeStyles.RoundtripKind),
-                DateTime.Parse(r.GetString(2), null, System.Globalization.DateTimeStyles.RoundtripKind),
-                r.GetString(3), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6),
-                Enum.Parse<RunStatus>(r.GetString(7)),
-                r.IsDBNull(8) ? null : r.GetString(8)));
-        }
+        using (var r = cmd.ExecuteReader())
+            while (r.Read()) list.Add(ReadSyncRun(r));
         return list;
     }
+
+    public IReadOnlyList<SyncRunRecord> ListSyncRuns(int limit, int offset, string? project = null, DateTime? from = null, DateTime? to = null)
+    {
+        using var c = OpenConnection();
+        // 子查询按 runId 去重分页（GROUP BY + MAX 排序，一轮一行）；过滤条件只拼接固定片段，值全部参数化
+        var conds = new List<string>();
+        if (project is not null) conds.Add("project_name=@p");
+        if (from is not null) conds.Add("started_at>=@from");
+        if (to is not null) conds.Add("started_at<@to");
+        var whereSql = conds.Count > 0 ? " WHERE " + string.Join(" AND ", conds) : "";
+        var andSql = conds.Count > 0 ? " AND " + string.Join(" AND ", conds) : "";
+
+        using var cmd = c.CreateCommand();
+        // 外层同样拼过滤条件（项目筛选必须作用于返回行，否则会带出同轮其他项目）
+        cmd.CommandText = $@"
+SELECT run_id, started_at, finished_at, project_name, success_count, skipped_count, failed_count, status, error
+FROM sync_run
+WHERE run_id IN (
+  SELECT run_id FROM sync_run{whereSql}
+  GROUP BY run_id ORDER BY MAX(started_at) DESC LIMIT @limit OFFSET @offset
+){andSql}
+ORDER BY started_at DESC, project_name;";
+        cmd.Parameters.AddWithValue("@limit", limit);
+        cmd.Parameters.AddWithValue("@offset", offset);
+        if (project is not null) cmd.Parameters.AddWithValue("@p", project);
+        // started_at 以 UTC ISO-8601 存储，字符串比较即时间比较；to 为开区间上界
+        if (from is not null) cmd.Parameters.AddWithValue("@from", from.Value.ToUniversalTime().ToString("O"));
+        if (to is not null) cmd.Parameters.AddWithValue("@to", to.Value.ToUniversalTime().ToString("O"));
+        var list = new List<SyncRunRecord>();
+        using (var r = cmd.ExecuteReader())
+            while (r.Read()) list.Add(ReadSyncRun(r));
+        return list;
+    }
+
+    private static SyncRunRecord ReadSyncRun(SqliteDataReader r) =>
+        new(r.GetString(0),
+            DateTime.Parse(r.GetString(1), null, System.Globalization.DateTimeStyles.RoundtripKind),
+            DateTime.Parse(r.GetString(2), null, System.Globalization.DateTimeStyles.RoundtripKind),
+            r.GetString(3), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6),
+            Enum.Parse<RunStatus>(r.GetString(7)),
+            r.IsDBNull(8) ? null : r.GetString(8));
 
     public void RecordFileDetails(string runId, string projectName, IEnumerable<FileResult> files)
     {
@@ -164,15 +196,22 @@ VALUES (@run, @p, @r, @o, @e);";
     }
 
     public IReadOnlyList<FileRunDetail> GetFailedOrSkipped(string runId)
+        => QueryFileDetails(runId, excludeSuccess: true);
+
+    /// <summary>某轮全量文件明细（含成功），按项目名/相对路径排序。</summary>
+    public IReadOnlyList<FileRunDetail> GetFileDetails(string runId)
+        => QueryFileDetails(runId, excludeSuccess: false);
+
+    private IReadOnlyList<FileRunDetail> QueryFileDetails(string runId, bool excludeSuccess)
     {
         using var c = OpenConnection();
         using var cmd = c.CreateCommand();
-        cmd.CommandText = @"
+        // 成功类含 Created/Updated/legacy Success，用 IN 白名单排除，避免新枚举混入失败/跳过明细
+        cmd.CommandText = $@"
 SELECT project_name, rel_path, outcome, error FROM file_run_detail
-WHERE run_id=@run AND outcome <> @success
+WHERE run_id=@run{(excludeSuccess ? " AND outcome IN ('Skipped', 'Failed')" : "")}
 ORDER BY project_name, rel_path;";
         cmd.Parameters.AddWithValue("@run", runId);
-        cmd.Parameters.AddWithValue("@success", FileOutcome.Success.ToString());
         var list = new List<FileRunDetail>();
         using var r = cmd.ExecuteReader();
         while (r.Read())

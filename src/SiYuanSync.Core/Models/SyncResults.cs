@@ -1,7 +1,8 @@
 namespace SiYuanSync.Core.Models;
 
 public enum RunStatus { Success, Partial, Failed, Skipped, Cancelled }
-public enum FileOutcome { Success, Skipped, Failed }
+/// <summary>Success 为旧数据兼容值（历史行 outcome='Success' 原样解析），新写入的成功结果用 Created/Updated 区分。</summary>
+public enum FileOutcome { Success, Created, Updated, Skipped, Failed }
 
 public sealed record SyncRunRecord(
     string RunId, DateTime StartedAt, DateTime FinishedAt, string ProjectName,

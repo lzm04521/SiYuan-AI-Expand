@@ -67,6 +67,31 @@ public class ProjectSyncTests : IDisposable
     }
 
     [Fact]
+    public async Task First_sync_marks_outcome_Created()
+    {
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+        Assert.Equal(FileOutcome.Created, Assert.Single(result.Files, f => f.RelPath == "a.md").Outcome);
+    }
+
+    [Fact]
+    public async Task Changed_content_marks_outcome_Updated()
+    {
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+
+        // 第二轮：内容变化 + 思源中已存在该 hpath（upsert 走更新路径）
+        Md("a.md", "# A\n正文改");
+        spy.ByHPath["/JPT/a"] = new[] { "doc-1" };
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+        Assert.Equal(FileOutcome.Updated, Assert.Single(result.Files, f => f.RelPath == "a.md").Outcome);
+    }
+
+    [Fact]
     public async Task Unchanged_md_skips_upsert()
     {
         Md("a.md", "# A\n正文");

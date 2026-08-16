@@ -55,5 +55,69 @@ public static class SyncEndpoints
 
             return Results.Json(new { runId, projects, details = fileDetails });
         });
+
+        // 同步日志：历史轮次列表（按 runId 分组），支持项目筛选与日期范围（本地日期，含当天）。
+        // 多取一轮仅用于判断 hasMore，"加载更多"按 offset 递增。
+        app.MapGet("/api/sync/history", (string? project, string? from, string? to, int? limit, int? offset) =>
+        {
+            DateTime? fromUtc = ParseLocalDateToUtc(from, includeDay: false);
+            DateTime? toUtc = ParseLocalDateToUtc(to, includeDay: true);
+            if ((from != null && fromUtc is null) || (to != null && toUtc is null))
+                return Results.Json(new { message = "日期格式须为 yyyy-MM-dd" }, statusCode: 400);
+
+            int lim = Math.Clamp(limit ?? 20, 1, 100);
+            int off = Math.Max(offset ?? 0, 0);
+            var rows = state.ListSyncRuns(lim + 1, off,
+                string.IsNullOrEmpty(project) ? null : project, fromUtc, toUtc);
+
+            var grouped = rows.GroupBy(r => r.RunId).ToList();
+            var hasMore = grouped.Count > lim;
+            var runs = grouped.Take(lim).Select(g => new
+            {
+                runId = g.Key,
+                startedAt = g.First().StartedAt,
+                projects = g.Select(r => new
+                {
+                    project = r.ProjectName,
+                    startedAt = r.StartedAt,
+                    finishedAt = r.FinishedAt,
+                    success = r.SuccessCount,
+                    skipped = r.SkippedCount,
+                    failed = r.FailedCount,
+                    status = r.Status.ToString(),
+                    error = r.Error
+                }).ToList()
+            }).ToList();
+
+            return Results.Json(new { runs, hasMore });
+        });
+
+        // 同步日志：某轮全量文件明细（含成功，区分新建/更新）。
+        app.MapGet("/api/sync/history/{runId}/details", (string runId) =>
+        {
+            var details = state.GetFileDetails(runId);
+            return Results.Json(new
+            {
+                runId,
+                details = details.Select(d => new
+                {
+                    project = d.ProjectName,
+                    relPath = d.RelPath,
+                    outcome = d.Outcome.ToString(),
+                    error = d.Error
+                }).ToList()
+            });
+        });
+    }
+
+    /// <summary>本地日期 yyyy-MM-dd → UTC 时间点；includeDay=true 时取次日零点（作开区间上界，覆盖当天）。</summary>
+    private static DateTime? ParseLocalDateToUtc(string? s, bool includeDay)
+    {
+        if (string.IsNullOrEmpty(s)) return null;
+        if (!DateTime.TryParseExact(s, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out var d))
+            return null;
+        if (includeDay) d = d.AddDays(1);
+        return DateTime.SpecifyKind(d, DateTimeKind.Local).ToUniversalTime();
     }
 }
