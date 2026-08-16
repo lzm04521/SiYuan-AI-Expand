@@ -65,6 +65,19 @@ public class DocScannerTests : IDisposable
         Assert.Single(result.Files);
     }
 
+    [Fact]
+    public void Files_sorted_by_relpath_ascending()
+    {
+        // DFS 子目录逆序深入（sub2 先于 sub 弹出），排序后应恢复路径正序
+        Write("z.md");
+        Write("sub2/y.md");
+        Write("sub/x.md");
+        Write("a.md");
+        var result = DocScanner.Scan(_root);
+        var rels = result.Files.Select(f => f.RelPath).ToArray();
+        Assert.Equal(new[] { "a.md", "sub/x.md", "sub2/y.md", "z.md" }, rels);
+    }
+
     private static void TryEnableCaseSensitive(string dir)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;

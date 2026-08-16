@@ -25,6 +25,9 @@ public static class DocScanner
 
             files.Add(new ScannedFile(abs, rel));
         }
+
+        // 按相对路径正序（大小写不敏感）：同步顺序稳定，浅路径先于深路径（'.' < '/'），父文档先建
+        files.Sort((x, y) => string.Compare(x.RelPath, y.RelPath, StringComparison.OrdinalIgnoreCase));
         return new ScanResult(files, errors);
     }
 
