@@ -10,4 +10,5 @@ internal static class SiyuanEndpoints
     public const string GetChildBlocks = "/api/block/getChildBlocks";
     public const string DeleteBlock = "/api/block/deleteBlock";
     public const string PrependBlock = "/api/block/prependBlock";
+    public const string SetDocSortMode = "/api/filetree/setDocSortMode";
 }

@@ -122,7 +122,7 @@ function renderProjects() {
   tbody.innerHTML = '';
   fillLogProjectOptions();
   if (_projects.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" class="muted">暂无项目，点击"新增项目"</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="muted">暂无项目，点击"新增项目"</td></tr>';
     return;
   }
   for (const p of _projects) {
@@ -133,6 +133,7 @@ function renderProjects() {
       <td><code>${escapeHtml(p.docPath)}</code></td>
       <td>${escapeHtml(p.notebook || '')}</td>
       <td>${escapeHtml(p.parentPath || '')}</td>
+      <td>${sortModeLabel(p.sortMode)}</td>
       <td><button type="button" data-act="edit">编辑</button></td>
       <td><button type="button" data-act="init" class="secondary">同步创建父目录</button></td>
       <td><button type="button" data-act="del" class="danger">删除</button></td>
@@ -149,6 +150,15 @@ function escapeHtml(s) {
     ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 }
 
+function sortModeLabel(sm) {
+  const labels = {
+    2: '更新时间↑', 3: '更新时间↓',
+    9: '创建时间↑', 10: '创建时间↓',
+    4: '文件名↑', 5: '文件名↓', 6: '自定义',
+  };
+  return labels[sm] || '不调整';
+}
+
 function openProjectDialog(existing) {
   const dlg = $('projectDialog');
   if (existing) {
@@ -158,6 +168,7 @@ function openProjectDialog(existing) {
     $('pDocPath').value = existing.docPath || '';
     $('pNotebook').value = existing.notebook || '';
     $('pParentPath').value = existing.parentPath || '';
+    $('pSortMode').value = existing.sortMode == null ? '' : String(existing.sortMode);
     $('pEnabled').checked = existing.enabled !== false;
   } else {
     $('projectDialogTitle').textContent = '新增项目';
@@ -166,6 +177,7 @@ function openProjectDialog(existing) {
     $('pDocPath').value = '';
     $('pNotebook').value = '';
     $('pParentPath').value = '';
+    $('pSortMode').value = '';
     $('pEnabled').checked = true;
   }
   dlg.showModal();
@@ -178,6 +190,7 @@ async function saveProjectFromDialog() {
     docPath: $('pDocPath').value.trim(),
     notebook: $('pNotebook').value.trim(),
     parentPath: $('pParentPath').value.trim(),
+    sortMode: $('pSortMode').value === '' ? null : Number($('pSortMode').value),
     enabled: $('pEnabled').checked,
   };
   if (!body.name || !body.docPath) {

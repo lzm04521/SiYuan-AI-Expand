@@ -27,6 +27,8 @@ public sealed class RetryingSiyuanClient : ISiyuanClient
         Retry(() => _inner.DeleteBlockAsync(b, ct));
     public Task PrependBlockAsync(string p, string m, CancellationToken ct) =>
         Retry(() => _inner.PrependBlockAsync(p, m, ct));
+    public Task SetDocSortModeAsync(string docId, int sortMode, CancellationToken ct) =>
+        Retry(() => _inner.SetDocSortModeAsync(docId, sortMode, ct));
 
     private async Task<T> Retry<T>(Func<Task<T>> action)
     {

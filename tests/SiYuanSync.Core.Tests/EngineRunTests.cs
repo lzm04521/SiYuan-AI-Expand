@@ -44,6 +44,7 @@ public class EngineRunTests : IDisposable
         public Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string d, CancellationToken ct) => Task.FromResult<IReadOnlyList<BlockChild>>(Array.Empty<BlockChild>());
         public Task DeleteBlockAsync(string b, CancellationToken ct) => Task.CompletedTask;
         public Task PrependBlockAsync(string p, string m, CancellationToken ct) => Task.CompletedTask;
+        public Task SetDocSortModeAsync(string d, int s, CancellationToken ct) => Task.CompletedTask;
     }
 
     [Fact]

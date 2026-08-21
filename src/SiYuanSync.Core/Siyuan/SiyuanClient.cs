@@ -44,6 +44,9 @@ public sealed class SiyuanClient : ISiyuanClient
     public Task PrependBlockAsync(string parentDocId, string md, CancellationToken ct) =>
         SendAsync(SiyuanEndpoints.PrependBlock, new { parentID = parentDocId, dataType = "markdown", data = md }, ct);
 
+    public Task SetDocSortModeAsync(string docId, int sortMode, CancellationToken ct) =>
+        SendAsync(SiyuanEndpoints.SetDocSortMode, new { id = docId, sortMode }, ct);
+
     private async Task<T> SendAndReadAsync<T>(string endpoint, object body, Func<JsonElement, T> map, CancellationToken ct)
     {
         using var doc = await ReadEnvelopeAsync(endpoint, body, ct);

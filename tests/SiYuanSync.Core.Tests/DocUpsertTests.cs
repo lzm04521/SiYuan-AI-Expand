@@ -29,6 +29,7 @@ public class DocUpsertTests
         public Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string id, CancellationToken ct)
             => Task.FromResult(Children.TryGetValue(id, out var v) ? v : (IReadOnlyList<BlockChild>)Array.Empty<BlockChild>());
         public Task DeleteBlockAsync(string b, CancellationToken ct) { DeletedBlocks.Add(b); return Task.CompletedTask; }
+        public Task SetDocSortModeAsync(string d, int s, CancellationToken ct) => Task.CompletedTask;
         public Task PrependBlockAsync(string p, string m, CancellationToken ct)
         {
             if (FailingPrepend) throw new SiyuanOperationException("prepend failed");

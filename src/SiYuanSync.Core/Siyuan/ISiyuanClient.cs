@@ -12,4 +12,5 @@ public interface ISiyuanClient
     Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string docId, CancellationToken ct);
     Task DeleteBlockAsync(string blockId, CancellationToken ct);
     Task PrependBlockAsync(string parentDocId, string md, CancellationToken ct);
+    Task SetDocSortModeAsync(string docId, int sortMode, CancellationToken ct);
 }

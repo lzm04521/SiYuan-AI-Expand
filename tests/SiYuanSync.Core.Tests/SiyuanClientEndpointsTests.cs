@@ -57,6 +57,14 @@ public class SiyuanClientEndpointsTests
     }
 
     [Fact]
+    public async Task SetDocSortMode_posts_id_and_sortMode()
+    {
+        var (client, sent) = Make(_ => Json("""{"code":0,"msg":"","data":{"box":"n1","id":"doc1","sortMode":3,"effectiveSortMode":3}}"""));
+        await client.SetDocSortModeAsync("doc1", 3, default);
+        Assert.Equal("/api/filetree/setDocSortMode", sent[0].RequestUri!.AbsolutePath);
+    }
+
+    [Fact]
     public async Task Nonzero_code_throws_operation_exception()
     {
         var (client, _) = Make(_ => Json("""{"code":-1,"msg":"boom","data":null}"""));

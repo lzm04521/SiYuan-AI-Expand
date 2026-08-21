@@ -120,6 +120,14 @@ public static class ProjectSync
         try { PurgeMissing(project, state, presentRels); }
         catch (Exception e) { logger.LogWarning(e, "清理本地已删除文件状态失败：{Project}", project.Name); }
 
+        // 7. 按配置设置父文档下子文档排序方式（等价于思源右键父文档→排序）；失败不影响同步结果
+        if (project.SortMode is int sortMode)
+        {
+            try { await siyuan.SetDocSortModeAsync(parentIds[0], sortMode, ct); }
+            catch (Exception e) when (e is not OperationCanceledException)
+            { logger.LogWarning(e, "设置父文档排序方式失败（思源版本可能低于 v3.8.1）：{Project} sortMode={SortMode}", project.Name, sortMode); }
+        }
+
         var status = failed > 0 ? (ok > 0 ? RunStatus.Partial : RunStatus.Failed) : RunStatus.Success;
         return new ProjectRunResult(project.Name, status, ok, skipped, failed, files, null);
     }

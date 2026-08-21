@@ -40,6 +40,13 @@ public static class ConfigValidator
         foreach (var g in dupNames)
             errors.Add($"项目 name 重复：'{g.Key}'");
 
+        // sortMode：空=不干预；非空须在思源合法范围 0-14（15=跟随文档树 等价于不设置，无意义故不允许）
+        foreach (var p in cfg.Projects)
+        {
+            if (p.SortMode is int sm && (sm < 0 || sm > 14))
+                errors.Add($"项目 '{p.Name}' sortMode 越界：{sm}，须为 0-14（3=更新时间降序，10=创建时间降序）或留空");
+        }
+
         // parentPath：空允许（MCP add_project 的中间态）；非空必须是规范 hpath（与思源 getIDsByHPath 精确匹配一致）
         foreach (var p in cfg.Projects)
         {

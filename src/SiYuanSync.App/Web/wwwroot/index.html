@@ -75,7 +75,7 @@
         <table id="projectsTable" class="data">
           <thead>
             <tr>
-              <th>名称</th><th>启用</th><th>docPath</th><th>笔记本</th><th>父路径</th><th colspan="3">操作</th>
+              <th>名称</th><th>启用</th><th>docPath</th><th>笔记本</th><th>父路径</th><th>排序</th><th colspan="3">操作</th>
             </tr>
           </thead>
           <tbody></tbody>
@@ -203,6 +203,18 @@
         <label>docPath（绝对或相对路径）<input id="pDocPath" type="text" required></label>
         <label>笔记本（留空走默认）<input id="pNotebook" type="text"></label>
         <label>父路径（如 /JPT）<input id="pParentPath" type="text"></label>
+        <label>同步后排序（父文档下子文档，需思源 ≥ v3.8.1）
+          <select id="pSortMode">
+            <option value="">不调整</option>
+            <option value="3">更新时间降序</option>
+            <option value="2">更新时间升序</option>
+            <option value="10">创建时间降序</option>
+            <option value="9">创建时间升序</option>
+            <option value="5">文件名降序</option>
+            <option value="4">文件名升序</option>
+            <option value="6">自定义</option>
+          </select>
+        </label>
         <label class="checkbox"><input id="pEnabled" type="checkbox" checked>启用</label>
         <div class="actions">
           <button type="button" id="pCancel">取消</button>

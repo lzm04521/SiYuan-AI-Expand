@@ -19,6 +19,7 @@ public class RetryingSiyuanClientTests
         public Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string d, CancellationToken ct) => Next<IReadOnlyList<BlockChild>>(Array.Empty<BlockChild>());
         public Task DeleteBlockAsync(string b, CancellationToken ct) => Next<bool>(true);
         public Task PrependBlockAsync(string p, string m, CancellationToken ct) => Next<bool>(true);
+        public Task SetDocSortModeAsync(string d, int s, CancellationToken ct) => Task.CompletedTask;
 
         private async Task<T> Next<T>(T ok)
         {

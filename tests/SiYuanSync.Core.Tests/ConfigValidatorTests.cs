@@ -15,6 +15,29 @@ public class ConfigValidatorTests
         Assert.Empty(ConfigValidator.Validate(Valid()));
     }
 
+    [Theory]
+    [InlineData(null)]
+    [InlineData(3)]
+    [InlineData(10)]
+    [InlineData(14)]
+    public void Project_sortMode_valid(int? sortMode)
+    {
+        var cfg = Valid();
+        cfg.Projects.Add(new ProjectConfig { Name = "P", DocPath = @"C:\d1", Notebook = "NB", ParentPath = "/A", SortMode = sortMode });
+        Assert.DoesNotContain(ConfigValidator.Validate(cfg), e => e.Contains("sortMode"));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(15)]
+    [InlineData(99)]
+    public void Project_sortMode_out_of_range_rejected(int? sortMode)
+    {
+        var cfg = Valid();
+        cfg.Projects.Add(new ProjectConfig { Name = "P", DocPath = @"C:\d1", Notebook = "NB", ParentPath = "/A", SortMode = sortMode });
+        Assert.Contains(ConfigValidator.Validate(cfg), e => e.Contains("sortMode"));
+    }
+
     [Fact]
     public void Invalid_bind_rejected()
     {

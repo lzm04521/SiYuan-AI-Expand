@@ -45,6 +45,10 @@ public class ProjectSyncTests : IDisposable
         public Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string d, CancellationToken ct) => Task.FromResult<IReadOnlyList<BlockChild>>(Array.Empty<BlockChild>());
         public Task DeleteBlockAsync(string b, CancellationToken ct) => Task.CompletedTask;
         public Task PrependBlockAsync(string p, string m, CancellationToken ct) => Task.CompletedTask;
+        public List<(string docId, int sortMode)> SortCalls = new();
+        public bool SortFail;
+        public Task SetDocSortModeAsync(string d, int s, CancellationToken ct)
+        { if (SortFail) throw new SiyuanOperationException("404"); SortCalls.Add((d, s)); return Task.CompletedTask; }
     }
 
     private ProjectConfig Project(string parent = "/JPT") => new()
@@ -52,6 +56,41 @@ public class ProjectSyncTests : IDisposable
         Name = "JPT", Enabled = true, DocPath = Path.Combine(_root, "doc"),
         Notebook = "AI", ParentPath = parent
     };
+
+    [Fact]
+    public async Task SortMode_set_applies_to_parent_doc_after_sync()
+    {
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.SortMode = 3;
+        var result = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Success, result.Status);
+        Assert.Equal(("parent", 3), Assert.Single(spy.SortCalls));
+    }
+
+    [Fact]
+    public async Task SortMode_null_skips_sort_call()
+    {
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Success, result.Status);
+        Assert.Empty(spy.SortCalls);
+    }
+
+    [Fact]
+    public async Task SortMode_failure_does_not_fail_sync()
+    {
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } }, SortFail = true };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.SortMode = 3;
+        var result = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Success, result.Status);
+        Assert.Equal(1, result.Success);
+    }
 
     [Fact]
     public async Task First_sync_creates_doc_and_records_hash()

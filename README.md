@@ -135,7 +135,8 @@ SiYuan-AI-Expand-Updater.exe（独立升级程序，由主程序在升级时拉�
       "enabled": true,
       "docPath": "D:\\work\\JPT\\doc",
       "notebook": "AI",
-      "parentPath": "/JPT"
+      "parentPath": "/JPT",
+      "sortMode": 3
     }
   ]
 }
@@ -143,6 +144,7 @@ SiYuan-AI-Expand-Updater.exe（独立升级程序，由主程序在升级时拉�
 
 - `notebook` 填笔记本**名字**（运行时通过 `lsNotebooks` 解析为 ID）；缺省用 `defaultNotebook`。
 - `parentPath` 是思源 hpath 格式，`/` 开头。
+- `sortMode` 可选：同步完成后对思源父文档设置子文档排序方式（等价于在思源中右键父文档 → 排序）。`3` = 更新时间降序（最近同步的排最前），`10` = 创建时间降序，`2/9` = 对应升序，`4/5` = 文件名升/降序，`6` = 自定义；留空/缺省 = 不调整。需思源 ≥ v3.8.1，低版本仅记录告警不影响同步。
 - 项目间 `(notebook, parentPath)` 组合必须唯一；不同项目的 `docPath` 不得相同或互为父子目录。
 
 ### Web 配置页
