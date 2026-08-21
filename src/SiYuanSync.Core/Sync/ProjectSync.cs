@@ -76,9 +76,15 @@ public static class ProjectSync
 
                 var proc = ContentPreprocessor.Process(raw);
                 var title = string.IsNullOrEmpty(proc.Title) ? Path.GetFileNameWithoutExtension(sf.AbsolutePath) : proc.Title;
-                var hash = ContentPreprocessor.ComputeHash(proc.BodyMd);
 
-                if (state.GetHash(project.Name, rel) == hash)
+                // 思源端文档可能被手动删除：先查存在性，不存在则不比对 hash 直接重推；存在且内容未变才跳过
+                IReadOnlyList<string> existingIds;
+                try { existingIds = await siyuan.GetDocIdsByHPathAsync(nb.Id, hpath, ct); }
+                catch (Exception e) when (e is not OperationCanceledException and not SiyuanAuthException)
+                { files.Add(new FileResult(rel, FileOutcome.Failed, $"检查思源端文档存在性失败：{e.Message}")); failed++; continue; }
+
+                var hash = ContentPreprocessor.ComputeHash(proc.BodyMd);
+                if (existingIds.Count > 0 && state.GetHash(project.Name, rel) == hash)
                 { files.Add(new FileResult(rel, FileOutcome.Skipped, null)); skipped++; continue; }
 
                 UpsertResult upsert;

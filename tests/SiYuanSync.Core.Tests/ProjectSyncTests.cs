@@ -38,7 +38,8 @@ public class ProjectSyncTests : IDisposable
             if (AuthFailOnHPath && HPathCallCount > 1) throw new SiyuanAuthException("401");
             return Task.FromResult<IReadOnlyList<string>>(ByHPath.TryGetValue(h, out var v) ? v : Array.Empty<string>());
         }
-        public Task<string> CreateDocWithMdAsync(string n, string h, string m, CancellationToken ct) { CreatedHPaths.Add(h); return Task.FromResult($"doc-{CreatedHPaths.Count}"); }
+        public Task<string> CreateDocWithMdAsync(string n, string h, string m, CancellationToken ct)
+        { CreatedHPaths.Add(h); var id = $"doc-{CreatedHPaths.Count}"; ByHPath[h] = new[] { id }; return Task.FromResult(id); }
         public Task RenameDocByIdAsync(string id, string t, CancellationToken ct) => Task.CompletedTask;
         public Task RemoveDocByIdAsync(string id, CancellationToken ct) => Task.CompletedTask;
         public Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string d, CancellationToken ct) => Task.FromResult<IReadOnlyList<BlockChild>>(Array.Empty<BlockChild>());
@@ -84,24 +85,42 @@ public class ProjectSyncTests : IDisposable
         using var state = new StateStore(_dbPath);
         await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
 
-        // 第二轮：内容变化 + 思源中已存在该 hpath（upsert 走更新路径）
+        // 第二轮：内容变化（思源中该 hpath 已由第一轮创建自动注册）
         Md("a.md", "# A\n正文改");
-        spy.ByHPath["/JPT/a"] = new[] { "doc-1" };
         var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
         Assert.Equal(FileOutcome.Updated, Assert.Single(result.Files, f => f.RelPath == "a.md").Outcome);
     }
 
     [Fact]
-    public async Task Unchanged_md_skips_upsert()
+    public async Task Unchanged_md_with_existing_siyuan_doc_skips_upsert()
     {
         Md("a.md", "# A\n正文");
         var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
         using var state = new StateStore(_dbPath);
         await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
         spy.CreatedHPaths.Clear();
-        // 第二轮，文件不变
-        await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+        // 第二轮，文件不变且思源端文档仍存在
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+        Assert.Equal(FileOutcome.Skipped, Assert.Single(result.Files, f => f.RelPath == "a.md").Outcome);
         Assert.Empty(spy.CreatedHPaths);
+    }
+
+    [Fact]
+    public async Task Siyuan_doc_deleted_recreates_even_if_hash_unchanged()
+    {
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+
+        // 思源端文档被手动删除，本地文件不变：不得因 hash 一致而跳过
+        spy.ByHPath.Remove("/JPT/a");
+        spy.CreatedHPaths.Clear();
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+
+        Assert.Equal(RunStatus.Success, result.Status);
+        Assert.Equal(FileOutcome.Created, Assert.Single(result.Files, f => f.RelPath == "a.md").Outcome);
+        Assert.Contains("/JPT/a", spy.CreatedHPaths);
     }
 
     [Fact]
