@@ -45,7 +45,7 @@ jobs:
 
       - name: Publish (build + zip)
         shell: pwsh
-        run: ./publish.ps1
+        run: ./publish.ps1 -Version "${{ steps.ver.outputs.version }}"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
