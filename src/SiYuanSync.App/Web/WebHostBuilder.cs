@@ -122,7 +122,8 @@ public static class WebHostBuilder
         });
     }
 
-    private static IPAddress MapBind(string bind) => bind switch
+    /// <summary>bind 字符串 → 监听地址；启动前端口预检与 Kestrel 共用同一映射。</summary>
+    public static IPAddress MapBind(string bind) => bind switch
     {
         "127.0.0.1" => IPAddress.Loopback,
         "localhost" => IPAddress.Loopback,
