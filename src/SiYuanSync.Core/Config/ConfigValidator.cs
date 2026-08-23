@@ -61,19 +61,8 @@ public static class ConfigValidator
             { errors.Add($"项目 '{p.Name}' parentPath 非法：{e.Message}"); }
         }
 
-        // (notebook, parentPath) 唯一；notebook 空白回退 defaultNotebook
-        string DefaultNb() => string.IsNullOrWhiteSpace(cfg.Siyuan.DefaultNotebook) ? "" : cfg.Siyuan.DefaultNotebook.Trim();
-        var seen = new Dictionary<(string nb, string path), string>(); // key → 首个项目名
-        foreach (var p in cfg.Projects)
-        {
-            var nb = string.IsNullOrWhiteSpace(p.Notebook) ? DefaultNb() : p.Notebook.Trim();
-            var path = (p.ParentPath ?? "").Trim().TrimEnd('/');
-            var key = (nb, path);
-            if (seen.TryGetValue(key, out var prev))
-                errors.Add($"项目 '{prev}' 与 '{p.Name}' 指向同一思源父路径 (notebook={nb}, parentPath={path})");
-            else
-                seen[key] = p.Name;
-        }
+        // (notebook, parentPath) 允许多项目共享（同步到同一父文档下）；
+        // 隐含约束由用户规避：共享父路径的项目间若存在同名相对文件，将映射到同一思源 hpath 互相覆盖
 
         // docPath 不重叠（规范化后相同或父子）
         var normalized = cfg.Projects

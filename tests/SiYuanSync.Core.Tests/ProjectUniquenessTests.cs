@@ -22,13 +22,13 @@ public class ProjectUniquenessTests
     }
 
     [Fact]
-    public void Same_notebook_parentPath_pair_conflicts()
+    public void Same_notebook_parentPath_pair_allowed()
     {
+        // 多项目可同步到同一 (notebook, parentPath)，文档在思源端同父文档下共存
         var cfg = WithProjects(
             P("A", @"D:\a\doc", "AI", "/JPT"),
             P("B", @"D:\b\doc", "AI", "/JPT"));
-        var errs = ConfigValidator.Validate(cfg);
-        Assert.Contains(errs, e => e.Contains("A") && e.Contains("B") && e.Contains("/JPT"));
+        Assert.Empty(ConfigValidator.Validate(cfg));
     }
 
     [Fact]
@@ -61,14 +61,14 @@ public class ProjectUniquenessTests
     }
 
     [Fact]
-    public void Empty_notebook_falls_back_to_default_then_checked()
+    public void Empty_notebook_falls_back_to_default_then_allowed()
     {
         var cfg = WithProjects(
             P("A", @"D:\a\doc", "", "/X"),
             P("B", @"D:\b\doc", "", "/X"));
         cfg.Siyuan.DefaultNotebook = "AI";
-        // 两者都回退到 (AI, /X) → 冲突
-        Assert.NotEmpty(ConfigValidator.Validate(cfg));
+        // 两者都回退到 (AI, /X)：共享父路径，允许
+        Assert.Empty(ConfigValidator.Validate(cfg));
     }
 
     [Fact]
