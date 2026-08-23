@@ -3,8 +3,10 @@
     <OutputType>Library</OutputType>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="AngleSharp" Version="1.5.2" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+    <PackageReference Include="ReverseMarkdown" Version="6.2.1" />
     <!-- Transitive pin: clears NU1903 (GHSA-2m69-gcr7-jv3q) on SQLitePCLRaw.lib.e_sqlite3. -->
     <PackageReference Include="SQLitePCLRaw.lib.e_sqlite3" Version="2.1.12" />
   </ItemGroup>
