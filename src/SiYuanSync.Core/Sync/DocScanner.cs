@@ -18,7 +18,7 @@ public static class DocScanner
             var key = SupportedFileTypes.StripSupportedExtension(rel);
             if (seenHpathSuffix.TryGetValue(key, out var first))
             {
-                errors.Add(new FileScanError(abs, $"与 '{first}' 映射到同一思源 hpath（Windows 大小写不敏感冲突）"));
+                errors.Add(new FileScanError(abs, $"与 '{first}' 映射到同一思源 hpath（去后缀后同名冲突）"));
                 continue;
             }
             seenHpathSuffix[key] = abs;
