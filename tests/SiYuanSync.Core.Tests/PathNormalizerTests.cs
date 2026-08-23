@@ -54,4 +54,12 @@ public class PathNormalizerTests
     public void Dot_segment_rejected()
         => Assert.Throws<PathNormalizerException>(() =>
             PathNormalizer.RelPathToHPath("/JPT", "./x.md"));
+
+    [Theory]
+    [InlineData("report.html", "/JPT/report")]
+    [InlineData("report.htm", "/JPT/report")]
+    [InlineData("report.HTML", "/JPT/report")]
+    [InlineData("sub/x.htm", "/JPT/sub/x")]
+    public void Html_relpath_maps_to_hpath(string rel, string expected)
+        => Assert.Equal(expected, PathNormalizer.RelPathToHPath("/JPT", rel));
 }

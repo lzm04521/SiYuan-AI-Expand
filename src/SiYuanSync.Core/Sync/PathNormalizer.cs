@@ -34,10 +34,9 @@ public static class PathNormalizer
         if (string.IsNullOrEmpty(parent) || !parent.StartsWith('/'))
             throw new PathNormalizerException($"parentPath 必须以 / 开头：'{parentPath}'");
 
-        // rel 去 .md 后缀（大小写不敏感），分隔统一 /
+        // rel 去支持后缀（.md/.html/.htm，大小写不敏感），分隔统一 /
         var rel = relPath.Replace('\\', '/');
-        if (rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase))
-            rel = rel[..^3];
+        rel = SupportedFileTypes.StripSupportedExtension(rel);
 
         var segments = rel.Split('/');
         var sb = new StringBuilder(parent);
