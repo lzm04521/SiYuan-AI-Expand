@@ -38,8 +38,9 @@ public class ProjectSyncTests : IDisposable
             if (AuthFailOnHPath && HPathCallCount > 1) throw new SiyuanAuthException("401");
             return Task.FromResult<IReadOnlyList<string>>(ByHPath.TryGetValue(h, out var v) ? v : Array.Empty<string>());
         }
+        public Dictionary<string, string> CreatedMd = new();   // hpath → 创建时的 md 正文
         public Task<string> CreateDocWithMdAsync(string n, string h, string m, CancellationToken ct)
-        { CreatedHPaths.Add(h); var id = $"doc-{CreatedHPaths.Count}"; ByHPath[h] = new[] { id }; return Task.FromResult(id); }
+        { CreatedHPaths.Add(h); CreatedMd[h] = m; var id = $"doc-{CreatedHPaths.Count}"; ByHPath[h] = new[] { id }; return Task.FromResult(id); }
         public Task RenameDocByIdAsync(string id, string t, CancellationToken ct) => Task.CompletedTask;
         public Task RemoveDocByIdAsync(string id, CancellationToken ct) => Task.CompletedTask;
         public Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string d, CancellationToken ct) => Task.FromResult<IReadOnlyList<BlockChild>>(Array.Empty<BlockChild>());
@@ -233,5 +234,50 @@ public class ProjectSyncTests : IDisposable
         Assert.Equal(RunStatus.Success, result.Status);
         Assert.Null(state.GetHash("JPT", "a.md")); // 状态清掉
         Assert.Empty(spy.CreatedHPaths); // 没有创建/删除调用
+    }
+
+    [Fact]
+    public async Task Html_report_converted_and_created_as_markdown()
+    {
+        Md("r.html", "<html><head><title>忽略头</title></head><body><h1>报告标题</h1><p>结论甲乙</p></body></html>");
+        Md("a.md", "# A\n正文");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+
+        Assert.Equal(RunStatus.Success, result.Status);
+        Assert.Equal(2, result.Success);
+        Assert.Contains("/JPT/r", spy.CreatedHPaths);          // hpath 剥 .html 后缀
+        Assert.DoesNotContain("忽略头", spy.CreatedMd["/JPT/r"]); // head 不进正文
+        Assert.DoesNotContain("# 报告标题", spy.CreatedMd["/JPT/r"]); // 首行 H1 已剥离为标题
+        Assert.Contains("结论甲乙", spy.CreatedMd["/JPT/r"]);   // 正文保留
+        Assert.NotNull(state.GetHash("JPT", "r.html"));        // 状态键含后缀
+    }
+
+    [Fact]
+    public async Task Html_without_h1_title_falls_back_to_filename()
+    {
+        Md("r.html", "<body><p>只有正文</p></body>");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+
+        Assert.Equal(RunStatus.Success, result.Status);
+        // 无首行 H1：创建路径标题即 hpath 末段（文件名），正文原样
+        Assert.Contains("/JPT/r", spy.CreatedHPaths);
+        Assert.Contains("只有正文", spy.CreatedMd["/JPT/r"]);
+    }
+
+    [Fact]
+    public async Task Unchanged_html_skipped_second_round()
+    {
+        Md("r.html", "<body><h1>R</h1><p>x</p></body>");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+        spy.CreatedHPaths.Clear();
+        var result = await ProjectSync.RunAsync(Project(), spy, state, NullLogger.Instance, default);
+        Assert.Equal(FileOutcome.Skipped, Assert.Single(result.Files, f => f.RelPath == "r.html").Outcome);
+        Assert.Empty(spy.CreatedHPaths);
     }
 }

@@ -74,6 +74,14 @@ public static class ProjectSync
                 try { raw = await File.ReadAllTextAsync(sf.AbsolutePath, Encoding.UTF8, ct); }
                 catch (Exception e) { files.Add(new FileResult(rel, FileOutcome.Failed, $"读取失败：{e.Message}")); failed++; continue; }
 
+                // HTML 报告：先转 Markdown，之后与 md 管线完全一致（首行 H1 剥离、hash、upsert）
+                if (SupportedFileTypes.IsHtml(rel))
+                {
+                    try { raw = HtmlPreprocessor.ToMarkdown(raw); }
+                    catch (Exception e)
+                    { files.Add(new FileResult(rel, FileOutcome.Failed, $"HTML 转换失败：{e.Message}")); failed++; continue; }
+                }
+
                 var proc = ContentPreprocessor.Process(raw);
                 var title = string.IsNullOrEmpty(proc.Title) ? Path.GetFileNameWithoutExtension(sf.AbsolutePath) : proc.Title;
 
