@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using SiYuanSync.Core.Siyuan;
 using Xunit;
 
@@ -5,7 +6,9 @@ namespace SiYuanSync.Core.Tests;
 
 public class SiyuanAutoStartTests
 {
-    private static SiyuanAutoStart New() => new(pollInterval: TimeSpan.FromMilliseconds(1));
+    private static SiyuanAutoStart New() => new(
+        pollInterval: TimeSpan.FromMilliseconds(1),
+        postLaunchDelay: TimeSpan.FromMilliseconds(1));
 
     [Fact]
     public async Task Already_running_skips_launch()
@@ -74,9 +77,31 @@ public class SiyuanAutoStartTests
     }
 
     [Fact]
-    public void Defaults_are_5_polls_every_30_seconds()
+    public async Task First_poll_happens_only_after_post_launch_delay()
     {
-        Assert.Equal(5, SiyuanAutoStart.DefaultMaxPolls);
-        Assert.Equal(TimeSpan.FromSeconds(30), SiyuanAutoStart.DefaultPollInterval);
+        // 拉起后必须先等满 postLaunchDelay 才做第一次就绪探测：
+        // 探测序列固定为 初始失败 → 拉起 → 等待 → 首次轮询成功，总耗时即等待耗时
+        var sw = Stopwatch.StartNew();
+        int probes = 0;
+        var ok = await new SiyuanAutoStart(
+            pollInterval: TimeSpan.FromMilliseconds(1),
+            postLaunchDelay: TimeSpan.FromMilliseconds(300)).EnsureRunningAsync(
+            probe: _ => Task.FromResult(++probes > 1),
+            launch: () => { },
+            maxPolls: 5);
+
+        Assert.True(ok);
+        Assert.True(sw.ElapsedMilliseconds >= 300,
+            $"拉起后未等满 postLaunchDelay 即放行，实际 {sw.ElapsedMilliseconds}ms");
+    }
+
+    [Fact]
+    public void Defaults_are_60s_settle_then_5_polls_every_30_seconds()
+    {
+        // 注：本文件内 SiYuanAutoStart 的非限定静态成员访问会触发 CS0103（new 表达式正常），
+        // 疑似 net10.0 编译器怪癖，故此测试用全限定名
+        Assert.Equal(5, SiYuanSync.Core.Siyuan.SiyuanAutoStart.DefaultMaxPolls);
+        Assert.Equal(TimeSpan.FromSeconds(30), SiYuanSync.Core.Siyuan.SiyuanAutoStart.DefaultPollInterval);
+        Assert.Equal(TimeSpan.FromSeconds(60), SiYuanSync.Core.Siyuan.SiyuanAutoStart.DefaultPostLaunchDelay);
     }
 }

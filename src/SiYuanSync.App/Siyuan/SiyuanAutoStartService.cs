@@ -8,7 +8,7 @@ namespace SiYuanSync.App.Siyuan;
 
 /// <summary>
 /// 同步前"确保思源在运行"：探测 API 可用性 → 未运行则解析思源 exe 并以 --openAsHidden 隐藏启动
-/// → 按 SiyuanAutoStart 的节奏（最多 5 次、间隔 30s）轮询至就绪。
+/// → 按 SiyuanAutoStart 的节奏（拉起后先固定等 60s 给内核启动留时间，再最多 5 次、间隔 30s 轮询至就绪）。
 /// 路径解析顺序：显式 ExePath → NSIS 常见安装路径 → siyuan:// 协议注册表 → Microsoft Store 包
 /// （Store 包安装目录带版本号且 .NET 无法直接枚举 WindowsApps，只能经 Get-AppxPackage 动态解析）。
 /// </summary>
@@ -51,14 +51,14 @@ public sealed class SiyuanAutoStartService
         }
     }
 
-    /// <summary>思源 API 可用 = true。网络不可达 = false（未运行）；鉴权/业务错误说明端口已通，视为在运行。</summary>
+    /// <summary>思源 API 真正可用 = true。网络不可达 = false（未运行）；鉴权失败说明端口已通，视为在运行；
+    /// 业务错误 = false —— 端口已通但内核尚未完成启动（或 lsNotebooks 本身失败）时同步必然失败，不算就绪。</summary>
     private async Task<bool> ProbeAsync(SiyuanConnectionConfig conn, CancellationToken ct)
     {
         var client = _clientFactory(conn);
         try { await client.ListNotebooksAsync(ct); return true; }
         catch (SiyuanTransientException) { return false; }
         catch (SiyuanAuthException) { return true; }
-        catch (SiyuanOperationException) { return true; }
     }
 
     /// <summary>按优先级解析思源 exe 完整路径；全部失败抛 InvalidOperationException 说明已尝试的位置。</summary>
