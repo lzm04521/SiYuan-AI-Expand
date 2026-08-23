@@ -10,12 +10,12 @@ public static class DocScanner
         var errors = new List<FileScanError>();
         var seenHpathSuffix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var abs in EnumerateMarkdownFiles(docPath))
+        foreach (var abs in EnumerateSupportedFiles(docPath))
         {
             var rel = Path.GetRelativePath(docPath, abs).Replace('\\', '/');
 
-            // 大小写不敏感同 hpath 冲突检测：以去后缀、统一大小写的 rel 为键
-            var key = rel.EndsWith(".md", StringComparison.OrdinalIgnoreCase) ? rel[..^3] : rel;
+            // 大小写不敏感同 hpath 冲突检测：以去支持后缀（.md/.html/.htm）、统一大小写的 rel 为键
+            var key = SupportedFileTypes.StripSupportedExtension(rel);
             if (seenHpathSuffix.TryGetValue(key, out var first))
             {
                 errors.Add(new FileScanError(abs, $"与 '{first}' 映射到同一思源 hpath（Windows 大小写不敏感冲突）"));
@@ -31,7 +31,7 @@ public static class DocScanner
         return new ScanResult(files, errors);
     }
 
-    private static IEnumerable<string> EnumerateMarkdownFiles(string root)
+    private static IEnumerable<string> EnumerateSupportedFiles(string root)
     {
         var stack = new Stack<DirectoryInfo>();
         stack.Push(new DirectoryInfo(root));
@@ -50,7 +50,7 @@ public static class DocScanner
             {
                 // 跳过符号链接/重解析点
                 if ((fi.Attributes & FileAttributes.ReparsePoint) != 0) continue;
-                if (fi.Extension.Equals(".md", StringComparison.OrdinalIgnoreCase))
+                if (SupportedFileTypes.IsSupportedExtension(fi.Extension))
                     yield return fi.FullName;
             }
 

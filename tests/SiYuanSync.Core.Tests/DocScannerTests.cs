@@ -78,6 +78,29 @@ public class DocScannerTests : IDisposable
         Assert.Equal(new[] { "a.md", "sub/x.md", "sub2/y.md", "z.md" }, rels);
     }
 
+    [Fact]
+    public void Scans_html_htm_and_md_ignores_others()
+    {
+        Write("a.md");
+        Write("b.html");
+        Write("c.htm");
+        Write("d.HTML");
+        Write("e.txt");
+        var result = DocScanner.Scan(_root);
+        Assert.Equal(4, result.Files.Count);
+    }
+
+    [Fact]
+    public void Md_and_html_same_stem_conflicts_on_hpath()
+    {
+        // foo.md 与 foo.html 剥后缀后映射同一 hpath，按既有冲突机制报错
+        Write("foo.md", "m");
+        Write("foo.html", "h");
+        var result = DocScanner.Scan(_root);
+        Assert.Single(result.Files);
+        Assert.NotEmpty(result.Errors);
+    }
+
     private static void TryEnableCaseSensitive(string dir)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
