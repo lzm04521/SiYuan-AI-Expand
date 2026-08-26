@@ -21,7 +21,9 @@ public static class SystemEndpoints
         app.MapGet("/api/system/info", () => Results.Json(new
         {
             version = AppVersion.CurrentString,
-            repoUrl = AppConstants.RepoUrl
+            repoUrl = AppConstants.RepoUrl,
+            uptimeSeconds = (long)(DateTime.UtcNow - Process.GetCurrentProcess().StartTime.ToUniversalTime()).TotalSeconds,
+            workingSetBytes = Environment.WorkingSet
         }));
 
         // 开机自启状态：非 Windows 平台 supported=false、enabled=false

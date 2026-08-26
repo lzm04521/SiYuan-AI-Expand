@@ -4,226 +4,34 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>SiYuan-AI-Expand 同步控制台</title>
-  <link rel="stylesheet" href="/styles.css">
+  <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <header class="topbar">
-    <h1>SiYuan-AI-Expand 同步控制台</h1>
-    <span id="syncBadge" class="badge badge-idle">空闲</span>
-  </header>
-
-  <nav class="tabs" id="tabs">
-    <button type="button" class="tab active" data-tab="sync">同步</button>
-    <button type="button" class="tab" data-tab="log">日志</button>
-    <button type="button" class="tab" data-tab="integrate">集成</button>
-    <button type="button" class="tab" data-tab="system">系统</button>
-  </nav>
-
-  <main id="app">
-    <!-- ========== 同步 ========== -->
-    <div class="tab-panel" data-panel="sync">
-      <!-- 同步设置：思源连接 + 同步节奏 -->
-      <section class="card">
-        <h2>同步设置</h2>
-        <fieldset class="subgroup">
-          <legend>思源连接</legend>
-          <div class="grid">
-            <label>Server URL
-              <input id="fServerUrl" type="text" placeholder="http://127.0.0.1:6806" autocomplete="off">
-            </label>
-            <label>Token
-              <input id="fToken" type="password" placeholder="未设置留空；已设置显示 ********" autocomplete="off">
-            </label>
-            <label>默认笔记本
-              <input id="fDefaultNotebook" type="text" placeholder="默认笔记本名" autocomplete="off">
-            </label>
-            <label>思源 exe 路径
-              <input id="fSiyuanExePath" type="text" placeholder="留空自动搜索（NSIS / siyuan:// 协议 / Microsoft Store）" autocomplete="off">
-            </label>
-          </div>
-        </fieldset>
-        <fieldset class="subgroup">
-          <legend>同步节奏</legend>
-          <div class="grid">
-            <label>间隔（分钟）
-              <input id="fInterval" type="number" min="1" step="1">
-            </label>
-            <label class="checkbox">
-              <input id="fRunOnStart" type="checkbox">
-              启动时立即跑一轮
-            </label>
-            <label class="checkbox">
-              <input id="fAutoStartSiyuan" type="checkbox">
-              思源未运行时自动启动（隐藏窗口，就绪后同步）
-            </label>
-          </div>
-        </fieldset>
-        <div class="actions">
-          <button id="btnSaveConfig" type="button">保存配置</button>
-          <button id="btnTestSiyuan" type="button" class="secondary">测试连接</button>
-        </div>
-        <p id="siyuanTestResult" class="muted" aria-live="polite"></p>
-      </section>
-
-      <!-- 项目列表 -->
-      <section class="card">
-        <h2>项目列表</h2>
-        <div class="actions">
-          <button id="btnAddProject" type="button">新增项目</button>
-          <button id="btnReloadProjects" type="button" class="secondary">刷新</button>
-        </div>
-        <table id="projectsTable" class="data">
-          <thead>
-            <tr>
-              <th>名称</th><th>启用</th><th>docPath</th><th>笔记本</th><th>父路径</th><th>排序</th><th colspan="3">操作</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </section>
-
-      <!-- 立即同步 / 状态 -->
-      <section class="card">
-        <h2>立即同步 / 状态</h2>
-        <div class="actions">
-          <button id="btnRunSync" type="button">立即全部同步</button>
-          <button id="btnRefreshStatus" type="button" class="secondary">刷新状态</button>
-        </div>
-        <p id="syncRunResult" class="muted" aria-live="polite"></p>
-        <table id="statusTable" class="data">
-          <thead>
-            <tr>
-              <th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>状态</th><th>错误</th><th>明细</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <p id="statusEmpty" class="muted">暂无同步记录</p>
-      </section>
+<div id="app">
+  <div class="banner">
+    <div class="logo">S</div>
+    <div class="app-title">SiYuan-AI-Expand 同步控制台</div>
+    <div class="banner-status">
+      <span :class="['badge', 'badge-sync', running ? 'run' : '']">{{ running ? '运行中' : '空闲' }}</span>
+      <span>运行 <b class="mono">{{ uptimeText }}</b></span>
+      <span>内存 <b class="mono">{{ fmtBytes(info.workingSetBytes) }}</b></span>
+      <span>版本 <b class="mono">{{ info.version || '…' }}</b></span>
     </div>
-
-    <!-- ========== 日志 ========== -->
-    <div class="tab-panel hidden" data-panel="log">
-      <section class="card">
-        <h2>同步日志</h2>
-        <div class="filters">
-          <label>项目
-            <select id="logProject">
-              <option value="">全部</option>
-            </select>
-          </label>
-          <label>开始日期
-            <input id="logFrom" type="date">
-          </label>
-          <label>至
-            <input id="logTo" type="date">
-          </label>
-          <button id="btnQueryLog" type="button">查询</button>
-        </div>
-        <table id="logTable" class="data">
-          <thead>
-            <tr>
-              <th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>状态</th><th>错误</th><th>明细</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-        <p id="logEmpty" class="muted hidden">无匹配的同步记录</p>
-        <div class="actions">
-          <button id="btnMoreLog" type="button" class="secondary" hidden>加载更多</button>
-        </div>
-        <p class="muted">记录每轮同步结果；点击[明细]查看该轮文件级结果（新建 / 更新 / 跳过 / 失败）。历史数据中未区分新建与更新的显示为"成功"。</p>
-      </section>
-    </div>
-
-    <!-- ========== 集成 ========== -->
-    <div class="tab-panel hidden" data-panel="integrate">
-      <section class="card">
-        <h2>MCP 服务（Model Context Protocol）</h2>
-        <div class="grid">
-          <label class="checkbox">
-            <input id="fMcpEnabled" type="checkbox">
-            启用 MCP 服务
-          </label>
-          <label>MCP 服务地址（与 Web 管理页共用端口；启用状态变更需重启程序）
-            <input id="fMcpUrl" type="text" readonly>
-          </label>
-        </div>
-        <div class="actions">
-          <button id="btnSaveMcp" type="button">保存 MCP 设置</button>
-        </div>
-        <p id="mcpSaveResult" class="muted" aria-live="polite"></p>
-        <p class="muted">供 AI 客户端（Claude Desktop / Cursor 等）调用，仅暴露"新增项目"工具，与 Web 管理页共用同一端口，仅本机可调用。Streamable HTTP：POST /mcp。</p>
-      </section>
-    </div>
-
-    <!-- ========== 系统 ========== -->
-    <div class="tab-panel hidden" data-panel="system">
-      <!-- 开机自启 -->
-      <section class="card">
-        <h2>开机自启</h2>
-        <div class="grid">
-          <label class="checkbox">
-            <input id="fAutostart" type="checkbox">
-            开机自动启动
-          </label>
-        </div>
-        <div class="actions">
-          <button id="btnSaveAutostart" type="button">保存</button>
-        </div>
-        <p id="autostartResult" class="muted" aria-live="polite"></p>
-        <p class="muted">登录 Windows 时自动启动本程序（写入注册表 HKCU\Software\Microsoft\Windows\CurrentVersion\Run）。仅 Windows 支持。</p>
-      </section>
-
-      <!-- 关于 -->
-      <section class="card">
-        <h2>关于</h2>
-        <div class="grid">
-          <label>当前版本
-            <input id="fVersion" type="text" readonly>
-          </label>
-          <label>仓库地址
-            <input id="fRepo" type="text" readonly>
-          </label>
-        </div>
-        <div class="actions">
-          <button id="btnCheckUpdate" type="button">检查更新</button>
-          <button id="btnApplyUpdate" type="button" class="secondary" disabled>应用更新</button>
-          <button id="btnOpenRepo" type="button" class="secondary">打开仓库</button>
-        </div>
-        <p id="updateResult" class="muted" aria-live="polite"></p>
-      </section>
-    </div>
-
-    <!-- 项目编辑弹窗 -->
-    <dialog id="projectDialog">
-      <form method="dialog" id="projectForm">
-        <h3 id="projectDialogTitle">新增项目</h3>
-        <label>名称<input id="pName" type="text" required></label>
-        <label>docPath（绝对或相对路径）<input id="pDocPath" type="text" required></label>
-        <label>笔记本（留空走默认）<input id="pNotebook" type="text"></label>
-        <label>父路径（如 /JPT）<input id="pParentPath" type="text"></label>
-        <label>同步后排序（父文档下子文档，需思源 ≥ v3.8.1）
-          <select id="pSortMode">
-            <option value="">不调整</option>
-            <option value="3">更新时间降序</option>
-            <option value="2">更新时间升序</option>
-            <option value="10">创建时间降序</option>
-            <option value="9">创建时间升序</option>
-            <option value="5">文件名降序</option>
-            <option value="4">文件名升序</option>
-            <option value="6">自定义</option>
-          </select>
-        </label>
-        <label class="checkbox"><input id="pEnabled" type="checkbox" checked>启用</label>
-        <div class="actions">
-          <button type="button" id="pCancel">取消</button>
-          <button type="button" id="pSave">保存</button>
-        </div>
-      </form>
-    </dialog>
-  </main>
-
-  <script src="/app.js"></script>
+  </div>
+  <div class="layout">
+    <aside class="side">
+      <a v-for="t in tabs" :key="t.id" :class="{active: tab===t.id}" @click="tab=t.id">{{ t.name }}</a>
+    </aside>
+    <main>
+      <overview-page v-if="tab==='overview'" :info="info" @running="onRunning" @idle="running=false"></overview-page>
+      <projects-page v-if="tab==='projects'"></projects-page>
+      <logs-page v-if="tab==='logs'"></logs-page>
+      <settings-page v-if="tab==='settings'"></settings-page>
+      <about-page v-if="tab==='about'"></about-page>
+    </main>
+  </div>
+</div>
+<script src="/vendor/vue.global.prod.js"></script>
+<script src="/app.js"></script>
 </body>
 </html>

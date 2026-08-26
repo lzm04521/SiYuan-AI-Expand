@@ -41,8 +41,9 @@ public sealed class WebAuthMiddleware
         ip is not null && (System.Net.IPAddress.IsLoopback(ip));
 
     private static bool IsStatic(string path) =>
-        path.StartsWith("/styles.css", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/style.css", StringComparison.OrdinalIgnoreCase) ||
         path.StartsWith("/app.js", StringComparison.OrdinalIgnoreCase) ||
+        path.StartsWith("/vendor/", StringComparison.OrdinalIgnoreCase) ||
         path == "/" || path == "/index.html";
 
     public static bool FixedTimeEquals(string a, string b)
