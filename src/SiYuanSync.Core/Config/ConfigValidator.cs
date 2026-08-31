@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using SiYuanSync.Core.Models;
 using SiYuanSync.Core.Sync;
 
@@ -45,6 +46,26 @@ public static class ConfigValidator
         {
             if (p.SortMode is int sm && (sm < 0 || sm > 14))
                 errors.Add($"项目 '{p.Name}' sortMode 越界：{sm}，须为 0-14（3=更新时间降序，10=创建时间降序）或留空");
+        }
+
+        // settleMinutes：null/0=关闭；其余须 1-1440
+        foreach (var p in cfg.Projects)
+        {
+            if (p.SettleMinutes is int sm && (sm < 0 || sm > 1440))
+                errors.Add($"项目 '{p.Name}' settleMinutes 越界：{sm}，须为 1-1440（0 或留空=关闭）");
+        }
+
+        // 正则：保存期拦截非法语法（1s 匹配超时防回溯爆炸）
+        foreach (var p in cfg.Projects)
+        {
+            if (!string.IsNullOrWhiteSpace(p.IncludePattern))
+                try { new Regex(p.IncludePattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)); }
+                catch (Exception e) when (e is RegexParseException or ArgumentOutOfRangeException)
+                { errors.Add($"项目 '{p.Name}' includePattern 正则非法：'{p.IncludePattern}'（{e.Message}）"); }
+            if (!string.IsNullOrWhiteSpace(p.ExcludePattern))
+                try { new Regex(p.ExcludePattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)); }
+                catch (Exception e) when (e is RegexParseException or ArgumentOutOfRangeException)
+                { errors.Add($"项目 '{p.Name}' excludePattern 正则非法：'{p.ExcludePattern}'（{e.Message}）"); }
         }
 
         // parentPath：空允许（MCP add_project 的中间态）；非空必须是规范 hpath（与思源 getIDsByHPath 精确匹配一致）

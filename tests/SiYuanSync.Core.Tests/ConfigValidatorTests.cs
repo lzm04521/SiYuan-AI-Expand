@@ -91,4 +91,47 @@ public class ConfigValidatorTests
         cfg.Siyuan.ServerUrl = "not a url";
         Assert.NotEmpty(ConfigValidator.Validate(cfg));
     }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(1440)]
+    public void Project_settleMinutes_valid(int? settle)
+    {
+        var cfg = Valid();
+        cfg.Projects.Add(new ProjectConfig { Name = "P", DocPath = @"C:\d1", Notebook = "NB", ParentPath = "/A", SettleMinutes = settle });
+        Assert.DoesNotContain(ConfigValidator.Validate(cfg), e => e.Contains("settleMinutes"));
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(1441)]
+    public void Project_settleMinutes_out_of_range_rejected(int? settle)
+    {
+        var cfg = Valid();
+        cfg.Projects.Add(new ProjectConfig { Name = "P", DocPath = @"C:\d1", Notebook = "NB", ParentPath = "/A", SettleMinutes = settle });
+        Assert.Contains(ConfigValidator.Validate(cfg), e => e.Contains("settleMinutes"));
+    }
+
+    [Theory]
+    [InlineData("includePattern", "(unclosed")]
+    [InlineData("excludePattern", "[bad")]
+    public void Project_invalid_regex_rejected(string field, string pattern)
+    {
+        var cfg = Valid();
+        var p = new ProjectConfig { Name = "P", DocPath = @"C:\d1", Notebook = "NB", ParentPath = "/A" };
+        if (field == "includePattern") p.IncludePattern = pattern; else p.ExcludePattern = pattern;
+        cfg.Projects.Add(p);
+        Assert.Contains(ConfigValidator.Validate(cfg), e => e.Contains(field));
+    }
+
+    [Fact]
+    public void Project_valid_regex_and_deleteSync_accepted()
+    {
+        var cfg = Valid();
+        cfg.Projects.Add(new ProjectConfig { Name = "P", DocPath = @"C:\d1", Notebook = "NB", ParentPath = "/A",
+            IncludePattern = @"^doc/", ExcludePattern = @"\.tmp\.md$", DeleteSync = true });
+        Assert.Empty(ConfigValidator.Validate(cfg));
+    }
 }
