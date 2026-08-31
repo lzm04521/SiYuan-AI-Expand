@@ -135,9 +135,73 @@ public static class ProjectSync
             }
         }
 
-        // 6. 本地删除：思源保留，状态清掉（以扫描全集 PresentRels 判定本地存在，被过滤/静默/冲突文件均不清）
-        try { PurgeMissing(project, state, scan.PresentRels); }
-        catch (Exception e) { logger.LogWarning(e, "清理本地已删除文件状态失败：{Project}", project.Name); }
+        // 6. 删除同步：state 有记录但本地消失的 rel；DeleteSync=false 仅清 state（现状），true 时删除思源文档
+        try
+        {
+            var stateRels = state.ListRelsByProject(project.Name);
+
+            // 空扫描熔断（仅 DeleteSync=true）：防 docPath 配错/盘未挂载导致整批误删
+            if (project.DeleteSync && stateRels.Count > 0 && scan.PresentRels.Count == 0)
+                return Failed(project,
+                    $"扫描到 0 个文件但历史有 {stateRels.Count} 条同步记录，疑似 docPath 异常，已跳过删除同步",
+                    files, ok, skipped, failed, deleted);
+
+            // 豁免集：本轮将同步（Files）或终将同步（Deferred）的 hpath——旧文档由新文件接管，不删
+            var keepHPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var sf in scan.Files)
+                try { keepHPaths.Add(PathNormalizer.RelPathToHPath(parentPath, sf.RelPath)); }
+                catch (PathNormalizerException) { }
+            foreach (var d in scan.Deferred)
+                try { keepHPaths.Add(PathNormalizer.RelPathToHPath(parentPath, ToRel(d.Path, docPath))); }
+                catch (PathNormalizerException) { }
+
+            foreach (var rel in stateRels)
+            {
+                ct.ThrowIfCancellationRequested();
+                if (scan.PresentRels.Contains(rel)) continue; // 本地仍存在（含被过滤/静默/冲突）：不动
+
+                if (!project.DeleteSync) { state.DeleteFileSync(project.Name, rel); continue; } // 现状：仅清 state
+
+                string hpath;
+                try { hpath = PathNormalizer.RelPathToHPath(parentPath, rel); }
+                catch (PathNormalizerException e)
+                { files.Add(new FileResult(rel, FileOutcome.Failed, $"删除候选 hpath 无效：{e.Message}")); failed++; continue; }
+
+                if (keepHPaths.Contains(hpath))
+                {   // 跨后缀改名等：文档由新文件接管，跳过删除、仅清 state（仅出现一次，透明记录）
+                    state.DeleteFileSync(project.Name, rel);
+                    files.Add(new FileResult(rel, FileOutcome.Skipped, "已由同 hpath 新文件接管"));
+                    skipped++;
+                    continue;
+                }
+
+                IReadOnlyList<string> ids;
+                try { ids = await siyuan.GetDocIdsByHPathAsync(nb.Id, hpath, ct); }
+                catch (SiyuanAuthException e) { return Failed(project, $"鉴权失败：{e.Message}", files, ok, skipped, failed, deleted); }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception e)
+                { files.Add(new FileResult(rel, FileOutcome.Failed, $"检查思源端文档失败：{e.Message}")); failed++; continue; }
+
+                // 思源端查不到（已被手动删除）：无需删除调用，清 state 并记 Deleted
+                var delFailed = false;
+                foreach (var id in ids)
+                {
+                    try { await siyuan.RemoveDocByIdAsync(id, ct); }
+                    catch (SiyuanAuthException e) { return Failed(project, $"鉴权失败：{e.Message}", files, ok, skipped, failed, deleted); }
+                    catch (OperationCanceledException) { throw; }
+                    catch (Exception e)
+                    { files.Add(new FileResult(rel, FileOutcome.Failed, $"删除思源文档失败：{e.Message}")); failed++; delFailed = true; break; }
+                }
+                if (delFailed) continue; // state 保留，下轮重试
+
+                state.DeleteFileSync(project.Name, rel);
+                files.Add(new FileResult(rel, FileOutcome.Deleted, null));
+                deleted++;
+            }
+        }
+        catch (SiyuanAuthException) { throw; }
+        catch (OperationCanceledException) { throw; }
+        catch (Exception e) { logger.LogWarning(e, "删除同步阶段异常：{Project}", project.Name); }
 
         // 7. 按配置设置父文档下子文档排序方式（等价于思源右键父文档→排序）；失败不影响同步结果
         if (project.SortMode is int sortMode)
@@ -149,14 +213,6 @@ public static class ProjectSync
 
         var status = failed > 0 ? (ok > 0 ? RunStatus.Partial : RunStatus.Failed) : RunStatus.Success;
         return new ProjectRunResult(project.Name, status, ok, skipped, failed, deleted, files, null);
-    }
-
-    private static void PurgeMissing(ProjectConfig project, IStateStore state, IReadOnlySet<string> present)
-    {
-        // StateStore 提供 ListRelsByProject（在 Task 7 接口补一个方法，见下）
-        foreach (var rel in state.ListRelsByProject(project.Name))
-            if (!present.Contains(rel))
-                state.DeleteFileSync(project.Name, rel);
     }
 
     private static string ToRel(string abs, string docPath) => Path.GetRelativePath(docPath, abs).Replace('\\', '/');

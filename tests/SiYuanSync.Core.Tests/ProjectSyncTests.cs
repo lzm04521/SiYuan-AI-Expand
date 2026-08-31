@@ -42,7 +42,8 @@ public class ProjectSyncTests : IDisposable
         public Task<string> CreateDocWithMdAsync(string n, string h, string m, CancellationToken ct)
         { CreatedHPaths.Add(h); CreatedMd[h] = m; var id = $"doc-{CreatedHPaths.Count}"; ByHPath[h] = new[] { id }; return Task.FromResult(id); }
         public Task RenameDocByIdAsync(string id, string t, CancellationToken ct) => Task.CompletedTask;
-        public Task RemoveDocByIdAsync(string id, CancellationToken ct) => Task.CompletedTask;
+        public List<string> RemovedIds = new();   // 删除阶段实际调用的 removeDocByID 记录
+        public Task RemoveDocByIdAsync(string id, CancellationToken ct) { RemovedIds.Add(id); return Task.CompletedTask; }
         public Task<IReadOnlyList<BlockChild>> GetChildBlocksAsync(string d, CancellationToken ct) => Task.FromResult<IReadOnlyList<BlockChild>>(Array.Empty<BlockChild>());
         public Task DeleteBlockAsync(string b, CancellationToken ct) => Task.CompletedTask;
         public Task PrependBlockAsync(string p, string m, CancellationToken ct) => Task.CompletedTask;
@@ -336,5 +337,89 @@ public class ProjectSyncTests : IDisposable
         state.RecordFileSync(proj.Name, "A.md", "hash", "doc-1", DateTime.UtcNow);
         await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
         Assert.NotNull(state.GetHash(proj.Name, "A.md")); // 基线微调：冲突文件本地存在不被清
+    }
+
+    /// <summary>两轮场景：首轮同步 gone.md 并记录 state → 本地删除 → 第二轮按 deleteSync 配置执行。
+    /// 第二轮在场一个 keep.md：删除路径用例不得触发空扫描熔断（熔断由 Empty_scan_with_history_trips_breaker 专测）。</summary>
+    private async Task<(ProjectRunResult r, SpyClient spy, StateStore state)> RunDeletedScenario(bool deleteSync)
+    {
+        Md("gone.md", "# G");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        var state = new StateStore(_dbPath);
+        var proj = Project(); proj.DeleteSync = deleteSync;
+        var first = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Equal(1, first.Success); // 首轮已同步并记录 state
+        File.Delete(Path.Combine(_root, "doc", "gone.md")); // 本地删除
+        Md("keep.md", "# K"); // 另一文件在场：空扫描熔断不应触发
+        var r = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        return (r, spy, state);
+    }
+
+    [Fact]
+    public async Task DeleteSync_on_removes_doc_and_clears_state()
+    {
+        var (r, spy, state) = await RunDeletedScenario(deleteSync: true);
+        Assert.Equal(1, r.Deleted);
+        Assert.Contains(r.Files, f => f.RelPath == "gone.md" && f.Outcome == FileOutcome.Deleted);
+        Assert.Single(spy.RemovedIds); // removeDocByID 被调（ByHPath 里 gone.md 的 doc id）
+        Assert.Null(state.GetHash("JPT", "gone.md"));
+    }
+
+    [Fact]
+    public async Task DeleteSync_off_keeps_current_behavior()
+    {
+        var (r, spy, state) = await RunDeletedScenario(deleteSync: false);
+        Assert.Equal(0, r.Deleted);
+        Assert.Empty(spy.RemovedIds); // 不删思源
+        Assert.Null(state.GetHash("JPT", "gone.md")); // 但 state 清了（现状）
+    }
+
+    [Fact]
+    public async Task Same_hpath_takeover_exempts_deletion()
+    {
+        // 跨后缀改名：gone.md 消失、gone.html 出现（同 hpath）→ 不删文档，旧 rel 清 state
+        Md("gone.md", "# G");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.DeleteSync = true;
+        await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        File.Delete(Path.Combine(_root, "doc", "gone.md"));
+        Md("gone.html", "<html><body><h1>G</h1>new</body></html>");
+        var r = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Empty(spy.RemovedIds);            // 旧文档未删（新文件接管）
+        Assert.Null(state.GetHash("JPT", "gone.md")); // 旧 rel state 已清
+        Assert.Contains(r.Files, f => f.RelPath == "gone.html" && f.Outcome == FileOutcome.Updated);
+    }
+
+    [Fact]
+    public async Task Empty_scan_with_history_trips_breaker()
+    {
+        Md("a.md", "# A");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.DeleteSync = true;
+        await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        File.Delete(Path.Combine(_root, "doc", "a.md"));
+        var r = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Failed, r.Status);
+        Assert.Contains("跳过删除同步", r.Error);
+        Assert.Empty(spy.RemovedIds);
+    }
+
+    [Fact]
+    public async Task Doc_missing_in_siyuan_still_clears_state_as_deleted()
+    {
+        Md("a.md", "# A");
+        Md("keep.md", "# K"); // 在场文件：避免空扫描熔断（熔断由专用用例覆盖）
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.DeleteSync = true;
+        await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        File.Delete(Path.Combine(_root, "doc", "a.md"));
+        spy.ByHPath.Remove("/JPT/a"); // 模拟思源端已被手动删除
+        var r = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Equal(1, r.Deleted);
+        Assert.Empty(spy.RemovedIds);
+        Assert.Null(state.GetHash("JPT", "a.md"));
     }
 }
