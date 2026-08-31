@@ -18,7 +18,7 @@
 const MASK = '********';
 const LOG_PAGE = 20;
 // 文件级结果中文标签；Success 为旧数据（未区分新建/更新）
-const OUTCOME_LABEL = { Created: '新建', Updated: '更新', Skipped: '跳过', Failed: '失败', Success: '成功' };
+const OUTCOME_LABEL = { Created: '新建', Updated: '更新', Skipped: '跳过', Failed: '失败', Success: '成功', Deleted: '删除' };
 const SORT_OPTIONS = [
   { value: null, label: '不调整' },
   { value: 3, label: '更新时间降序' }, { value: 2, label: '更新时间升序' },
@@ -131,7 +131,7 @@ const OverviewPage = {
       if (lr.failed > 0) {
         return { cls: 'badge badge-red', text: lr.failed + ' 失败' + (lr.success ? ' · ' + lr.success + ' 成功' : ''), time: fmtDate(lr.startedAt) };
       }
-      return { cls: 'badge badge-green', text: lr.success + ' 成功' + (lr.skipped ? ' · ' + lr.skipped + ' 跳过' : ''), time: fmtDate(lr.startedAt) };
+      return { cls: 'badge badge-green', text: lr.success + ' 成功' + (lr.skipped ? ' · ' + lr.skipped + ' 跳过' : '') + (lr.deleted ? ' · ' + lr.deleted + ' 删除' : ''), time: fmtDate(lr.startedAt) };
     },
     detailsFor(name) { return ((this.status && this.status.details) || []).filter((d) => d.project === name); },
     async toggleProject(p) {
@@ -139,6 +139,8 @@ const OverviewPage = {
         await api.put('/api/projects/' + encodeURIComponent(p.name), {
           name: p.name, docPath: p.docPath, notebook: p.notebook, parentPath: p.parentPath,
           sortMode: p.sortMode, enabled: p.enabled === false,
+          settleMinutes: p.settleMinutes, includePattern: p.includePattern, excludePattern: p.excludePattern,
+          deleteSync: p.deleteSync === true,
         });
         await this.refresh();
       } catch (e) { alert('操作失败：' + e.message); }
@@ -173,7 +175,7 @@ const OverviewPage = {
     <div class="card">
       <div class="sec-h">最近一轮状态</div>
       <table v-if="(status && status.projects || []).length">
-        <thead><tr><th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>状态</th><th>错误</th><th>明细</th></tr></thead>
+        <thead><tr><th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>已删</th><th>状态</th><th>错误</th><th>明细</th></tr></thead>
         <tbody>
           <template v-for="p in status.projects" :key="p.project">
             <tr>
@@ -182,12 +184,13 @@ const OverviewPage = {
               <td>{{ p.success }}</td>
               <td>{{ p.skipped }}</td>
               <td>{{ p.failed }}</td>
+              <td>{{ p.deleted ?? 0 }}</td>
               <td><span :class="statusBadge(p.status).cls">{{ statusBadge(p.status).text }}</span></td>
               <td>{{ p.error || '' }}</td>
               <td><button class="btn-link" :disabled="!detailsFor(p.project).length" @click="expanded[p.project] = !expanded[p.project]">{{ expanded[p.project] ? '收起' : '展开' }}</button></td>
             </tr>
             <tr class="expanded-row" v-if="expanded[p.project]">
-              <td colspan="8">
+              <td colspan="9">
                 <table class="sub-table">
                   <thead><tr><th>相对路径</th><th>结果</th><th>错误</th></tr></thead>
                   <tbody>
@@ -220,12 +223,16 @@ const ProjectsPage = {
       } catch (e) { alert('加载失败：' + e.message); }
     },
     openNew() {
-      this.editing = { isNew: true, name: '', docPath: '', notebook: '', parentPath: '', sortMode: null, enabled: true };
+      this.editing = { isNew: true, name: '', docPath: '', notebook: '', parentPath: '', sortMode: null, enabled: true,
+        settleMinutes: '', includePattern: '', excludePattern: '', deleteSync: false };
     },
     openEdit(p) {
       this.editing = {
         isNew: false, name: p.name, docPath: p.docPath || '', notebook: p.notebook || '',
         parentPath: p.parentPath || '', sortMode: p.sortMode == null ? null : Number(p.sortMode),
+        settleMinutes: p.settleMinutes == null ? '' : String(p.settleMinutes),
+        includePattern: p.includePattern || '', excludePattern: p.excludePattern || '',
+        deleteSync: p.deleteSync === true,
         enabled: p.enabled !== false,
       };
     },
@@ -237,6 +244,9 @@ const ProjectsPage = {
         name: f.name.trim(), docPath: f.docPath.trim(), notebook: f.notebook.trim(),
         parentPath: f.parentPath.trim(),
         sortMode: (f.sortMode === null || f.sortMode === '' || f.sortMode === undefined) ? null : Number(f.sortMode),
+        settleMinutes: (f.settleMinutes === '' || f.settleMinutes === null || f.settleMinutes === undefined) ? null : Number(f.settleMinutes),
+        includePattern: (f.includePattern || '').trim(), excludePattern: (f.excludePattern || '').trim(),
+        deleteSync: f.deleteSync === true,
         enabled: f.enabled,
       };
       try {
@@ -302,6 +312,13 @@ const ProjectsPage = {
           </select>
           <span class="hint">需思源 ≥ v3.8.1</span>
         </div>
+        <div class="form-row"><label>静默期(分)</label><input type="number" min="1" max="1440" v-model="editing.settleMinutes" placeholder="留空 = 立即同步"></div>
+        <div class="form-row"><label>包含正则</label><input type="text" v-model="editing.includePattern" placeholder="匹配相对路径(/分隔)，留空不启用"></div>
+        <div class="form-row"><label>排除正则</label><input type="text" v-model="editing.excludePattern" placeholder="匹配相对路径(/分隔)，留空不启用"></div>
+        <div class="form-row"><label>删除同步</label>
+          <div class="switch-label"><div :class="['switch', editing.deleteSync ? 'on' : '']" @click="editing.deleteSync = !editing.deleteSync"></div>开启</div>
+          <span class="hint">本地删除→思源旧文档移入回收站；首轮清理历史残留</span>
+        </div>
         <div class="form-row"><label></label>
           <div class="switch-label"><div :class="['switch', editing.enabled ? 'on' : '']" @click="editing.enabled = !editing.enabled"></div>启用</div>
         </div>
@@ -352,7 +369,7 @@ const LogsPage = {
           for (const p of run.projects || []) {
             this.rows.push({
               runId: run.runId, project: p.project, startedAt: p.startedAt,
-              success: p.success, skipped: p.skipped, failed: p.failed, status: p.status, error: p.error,
+              success: p.success, skipped: p.skipped, failed: p.failed, deleted: p.deleted, status: p.status, error: p.error,
             });
           }
         }
@@ -389,7 +406,7 @@ const LogsPage = {
       <button class="btn btn-primary" @click="query">查询</button>
     </div>
     <table v-if="rows.length">
-      <thead><tr><th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>状态</th><th>错误</th><th>明细</th></tr></thead>
+      <thead><tr><th>项目</th><th>开始</th><th>成功</th><th>跳过</th><th>失败</th><th>已删</th><th>状态</th><th>错误</th><th>明细</th></tr></thead>
       <tbody>
         <template v-for="(r, i) in rows" :key="i">
           <tr>
@@ -398,12 +415,13 @@ const LogsPage = {
             <td>{{ r.success }}</td>
             <td>{{ r.skipped }}</td>
             <td>{{ r.failed }}</td>
+            <td>{{ r.deleted ?? 0 }}</td>
             <td><span :class="statusBadge(r.status).cls">{{ statusBadge(r.status).text }}</span></td>
             <td>{{ r.error || '' }}</td>
             <td><button class="btn-link" @click="toggle(r)">{{ expanded[r.runId + '|' + r.project] ? '收起' : '展开' }}</button></td>
           </tr>
           <tr class="expanded-row" v-if="expanded[r.runId + '|' + r.project]">
-            <td colspan="8">
+            <td colspan="9">
               <table class="sub-table" v-if="detailsOf(r).length">
                 <thead><tr><th>相对路径</th><th>结果</th><th>错误</th></tr></thead>
                 <tbody>
@@ -425,7 +443,7 @@ const LogsPage = {
       <button class="btn" :disabled="loading" @click="more">加载更多</button>
       <span>已显示 {{ rows.length }} 条</span>
     </div>
-    <p class="result-line">记录每轮同步结果；点击[明细]查看该轮文件级结果（新建 / 更新 / 跳过 / 失败）。历史数据中未区分新建与更新的显示为"成功"。</p>
+    <p class="result-line">记录每轮同步结果；点击[明细]查看该轮文件级结果（新建 / 更新 / 跳过 / 失败 / 删除）。历史数据中未区分新建与更新的显示为"成功"。</p>
   </div>`,
 };
 

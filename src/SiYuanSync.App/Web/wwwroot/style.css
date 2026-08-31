@@ -89,6 +89,7 @@ input:focus, select:focus { outline: 2px solid #bfdbfe; border-color: #2563eb; }
 .outcome-Updated { color: #2563eb; font-weight: 600; }
 .outcome-Skipped { color: #6b7280; }
 .outcome-Failed { color: #dc2626; font-weight: 600; }
+.outcome-Deleted { color: #b45309; font-weight: 600; }
 .outcome-Success { color: #15803d; }
 code { font-family: Consolas, monospace; font-size: 12px; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
 
