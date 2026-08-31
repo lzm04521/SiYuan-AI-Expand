@@ -1,4 +1,5 @@
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
 using SiYuanSync.Core.Models;
 using SiYuanSync.Core.Siyuan;
@@ -44,25 +45,35 @@ public static class ProjectSync
         if (parentIds.Count == 0)
             return Failed(project, $"思源中父目录 '{parentPath}' 不存在，请先点[同步创建父目录]", files, 0, 0, 0, 0);
 
-        // 4. 扫描
+        // 4. 构造扫描过滤器（正则已在保存/加载期校验；手改 config 绕过校验时这里兜底 Failed）
+        ScanFilter? filter;
+        try
+        {
+            filter = new ScanFilter(project.SettleMinutes ?? 0,
+                string.IsNullOrWhiteSpace(project.IncludePattern) ? null
+                    : new Regex(project.IncludePattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)),
+                string.IsNullOrWhiteSpace(project.ExcludePattern) ? null
+                    : new Regex(project.ExcludePattern, RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1)));
+        }
+        catch (Exception e) when (e is RegexParseException or ArgumentOutOfRangeException)
+        { return Failed(project, $"正则配置非法：{e.Message}", files, 0, 0, 0, 0); }
+
         ScanResult scan;
-        try { scan = DocScanner.Scan(docPath); }
+        try { scan = DocScanner.Scan(docPath, filter); }
         catch (Exception e) { return Failed(project, $"扫描目录失败：{e.Message}", files, 0, 0, 0, 0); }
 
         foreach (var se in scan.Errors)
-        {
-            files.Add(new FileResult(se.Path, FileOutcome.Failed, se.Reason));
-            failed++;
-        }
+        { files.Add(new FileResult(se.Path, FileOutcome.Failed, se.Reason)); failed++; }
 
-        var presentRels = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        // 被过滤（正则）/未静默文件：Skipped 带原因，与"hash 未变"同一展示机制
+        foreach (var fe in scan.Filtered.Concat(scan.Deferred))
+        { files.Add(new FileResult(ToRel(fe.Path, docPath), FileOutcome.Skipped, fe.Reason)); skipped++; }
 
         // 5. 逐文件
         foreach (var sf in scan.Files)
         {
             ct.ThrowIfCancellationRequested();
             string rel = sf.RelPath;
-            presentRels.Add(rel);
             try
             {
                 string hpath;
@@ -124,8 +135,8 @@ public static class ProjectSync
             }
         }
 
-        // 6. 本地删除：思源保留，状态清掉
-        try { PurgeMissing(project, state, presentRels); }
+        // 6. 本地删除：思源保留，状态清掉（以扫描全集 PresentRels 判定本地存在，被过滤/静默/冲突文件均不清）
+        try { PurgeMissing(project, state, scan.PresentRels); }
         catch (Exception e) { logger.LogWarning(e, "清理本地已删除文件状态失败：{Project}", project.Name); }
 
         // 7. 按配置设置父文档下子文档排序方式（等价于思源右键父文档→排序）；失败不影响同步结果
@@ -140,13 +151,15 @@ public static class ProjectSync
         return new ProjectRunResult(project.Name, status, ok, skipped, failed, deleted, files, null);
     }
 
-    private static void PurgeMissing(ProjectConfig project, IStateStore state, HashSet<string> present)
+    private static void PurgeMissing(ProjectConfig project, IStateStore state, IReadOnlySet<string> present)
     {
         // StateStore 提供 ListRelsByProject（在 Task 7 接口补一个方法，见下）
         foreach (var rel in state.ListRelsByProject(project.Name))
             if (!present.Contains(rel))
                 state.DeleteFileSync(project.Name, rel);
     }
+
+    private static string ToRel(string abs, string docPath) => Path.GetRelativePath(docPath, abs).Replace('\\', '/');
 
     private static ProjectRunResult Failed(ProjectConfig p, string error, List<FileResult> files, int ok, int skipped, int failed, int deleted) =>
         new(p.Name, RunStatus.Failed, ok, skipped, failed, deleted, files, error);

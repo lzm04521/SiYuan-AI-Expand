@@ -280,4 +280,61 @@ public class ProjectSyncTests : IDisposable
         Assert.Equal(FileOutcome.Skipped, Assert.Single(result.Files, f => f.RelPath == "r.html").Outcome);
         Assert.Empty(spy.CreatedHPaths);
     }
+
+    [Fact]
+    public async Task Settled_file_skips_with_reason_and_syncs_after_window()
+    {
+        Md("a.md", "# A\n正文");
+        File.SetLastWriteTimeUtc(Path.Combine(_root, "doc", "a.md"), DateTime.UtcNow); // 未满
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.SettleMinutes = 10;
+        var r = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Success, r.Status);
+        Assert.Equal(0, r.Success);
+        var fr = Assert.Single(r.Files, f => f.RelPath == "a.md");
+        Assert.Equal(FileOutcome.Skipped, fr.Outcome);
+        Assert.Contains("静默期", fr.Error);
+    }
+
+    [Fact]
+    public async Task Excluded_file_skips_and_state_not_purged()
+    {
+        Md("keep.md", "# K");
+        Md("skip.tmp.md", "# T");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.ExcludePattern = @"\.tmp\.md$";
+        await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default); // 首轮：skip.tmp 未同步过
+        // 先手动给 skip.tmp.md 补一条 state 记录（模拟历史上同步过），再跑一轮
+        state.RecordFileSync(proj.Name, "skip.tmp.md", "hash-old", "doc-x", DateTime.UtcNow);
+        await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.NotNull(state.GetHash(proj.Name, "skip.tmp.md")); // 本地存在 → 不被清
+    }
+
+    [Fact]
+    public async Task Invalid_runtime_regex_fails_project()
+    {
+        Md("a.md", "# A");
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project(); proj.IncludePattern = "(unclosed"; // 绕过保存校验的手改场景
+        var r = await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.Equal(RunStatus.Failed, r.Status);
+        Assert.Contains("正则", r.Error);
+    }
+
+    [Fact]
+    public async Task Conflict_file_present_locally_keeps_state()
+    {
+        Md("A.md", "A");
+        Md("a.md", "a"); // 大小写冲突（FS 大小写敏感时成两文件）
+        if (File.ReadAllText(Path.Combine(_root, "doc", "A.md")) == "a") return;
+        var spy = new SpyClient { Notebooks = { new("n1", "AI") }, ByHPath = { ["/JPT"] = new[] { "parent" } } };
+        using var state = new StateStore(_dbPath);
+        var proj = Project();
+        state.RecordFileSync(proj.Name, "A.md", "hash", "doc-1", DateTime.UtcNow);
+        await ProjectSync.RunAsync(proj, spy, state, NullLogger.Instance, default);
+        Assert.NotNull(state.GetHash(proj.Name, "A.md")); // 基线微调：冲突文件本地存在不被清
+    }
 }
