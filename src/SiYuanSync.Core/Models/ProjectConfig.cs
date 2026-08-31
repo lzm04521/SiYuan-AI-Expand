@@ -20,6 +20,6 @@ public sealed class ProjectConfig
     /// <summary>排除正则（匹配 docPath 相对路径，/ 分隔）：匹配文件跳过同步；空 = 不排除。</summary>
     public string ExcludePattern { get; set; } = "";
 
-    /// <summary>删除同步：本地文件消失后删除思源端对应文档（进回收站）；false = 保持只增不删。</summary>
+    /// <summary>删除同步：本地文件消失后删除思源端对应文档（可从思源文件历史恢复）；false = 保持只增不删。</summary>
     public bool DeleteSync { get; set; } = false;
 }

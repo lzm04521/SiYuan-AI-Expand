@@ -317,7 +317,7 @@ const ProjectsPage = {
         <div class="form-row"><label>排除正则</label><input type="text" v-model="editing.excludePattern" placeholder="匹配相对路径(/分隔)，留空不启用"></div>
         <div class="form-row"><label>删除同步</label>
           <div class="switch-label"><div :class="['switch', editing.deleteSync ? 'on' : '']" @click="editing.deleteSync = !editing.deleteSync"></div>开启</div>
-          <span class="hint">本地删除→思源旧文档移入回收站；首轮清理历史残留</span>
+          <span class="hint">本地删除→思源旧文档删除（可从思源文件历史恢复）；首轮清理历史残留；排除正则的文件本地删除后同样会被清理</span>
         </div>
         <div class="form-row"><label></label>
           <div class="switch-label"><div :class="['switch', editing.enabled ? 'on' : '']" @click="editing.enabled = !editing.enabled"></div>启用</div>
