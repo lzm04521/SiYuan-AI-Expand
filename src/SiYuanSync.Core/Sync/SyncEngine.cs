@@ -32,7 +32,7 @@ public sealed class SyncEngine
         {
             _logger.LogWarning("未配置思源 token，整轮跳过 {Count} 个项目", enabledProjects.Count);
             foreach (var p in enabledProjects)
-                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0,
+                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0, 0,
                     Array.Empty<FileResult>(), "未配置思源 token（请在 Web 配置页设置）"));
             await PersistRun(runId, startedAt, results);
             return new SyncRunResult(runId, startedAt, DateTime.UtcNow, results);
@@ -52,7 +52,7 @@ public sealed class SyncEngine
             // 同一实例上一项目已鉴权失败：剩余项目直接 Failed 跳过
             if (authFailed)
             {
-                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0,
+                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0, 0,
                     Array.Empty<FileResult>(), "上一项目鉴权失败，已停止本实例后续调用"));
                 continue;
             }
@@ -68,7 +68,7 @@ public sealed class SyncEngine
             }
             catch (SiyuanAuthException e)
             {
-                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0,
+                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0, 0,
                     Array.Empty<FileResult>(), $"鉴权失败：{e.Message}"));
                 authFailed = true;
             }
@@ -76,7 +76,7 @@ public sealed class SyncEngine
             {
                 // 按尾部语义注记：捕获取消 → 当前项目标 Cancelled → 剩余未开始项目标 Cancelled
                 // → 完成已收集结果 → 持久化 → 返回（不重抛）
-                results.Add(new ProjectRunResult(p.Name, RunStatus.Cancelled, 0, 0, 0,
+                results.Add(new ProjectRunResult(p.Name, RunStatus.Cancelled, 0, 0, 0, 0,
                     Array.Empty<FileResult>(), "本轮被取消"));
                 cancelledFromIndex = i + 1;
                 break;
@@ -84,7 +84,7 @@ public sealed class SyncEngine
             catch (Exception e)
             {
                 _logger.LogError(e, "项目 {Name} 同步异常", p.Name);
-                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0,
+                results.Add(new ProjectRunResult(p.Name, RunStatus.Failed, 0, 0, 0, 0,
                     Array.Empty<FileResult>(), e.Message));
             }
         }
@@ -95,7 +95,7 @@ public sealed class SyncEngine
             for (int i = cancelledFromIndex; i < enabledProjects.Count; i++)
             {
                 var p = enabledProjects[i];
-                results.Add(new ProjectRunResult(p.Name, RunStatus.Cancelled, 0, 0, 0,
+                results.Add(new ProjectRunResult(p.Name, RunStatus.Cancelled, 0, 0, 0, 0,
                     Array.Empty<FileResult>(), "本轮被取消"));
             }
         }
@@ -112,7 +112,7 @@ public sealed class SyncEngine
             try
             {
                 _state.RecordSyncRun(new SyncRunRecord(runId, startedAt, finishedAt,
-                    pr.ProjectName, pr.Success, pr.Skipped, pr.Failed, pr.Status, pr.Error));
+                    pr.ProjectName, pr.Success, pr.Skipped, pr.Failed, pr.Deleted, pr.Status, pr.Error));
             }
             catch (Exception e) { _logger.LogError(e, "写入 sync_run 失败：{Project}", pr.ProjectName); }
 

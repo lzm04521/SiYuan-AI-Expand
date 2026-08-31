@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS sync_run (
   success_count INTEGER NOT NULL,
   skipped_count INTEGER NOT NULL,
   failed_count INTEGER NOT NULL,
+  deleted_count INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL,
   error TEXT
 );

@@ -18,7 +18,7 @@ public class StateStoreSyncRunTests : IDisposable
     public void Dispose() { _store.Dispose(); try { Directory.Delete(_dir, true); } catch { } }
 
     private static SyncRunRecord Rec(string runId, string project, RunStatus status, int s, int sk, int f, DateTime t) =>
-        new(runId, t, t.AddMinutes(1), project, s, sk, f, status, null);
+        new(runId, t, t.AddMinutes(1), project, s, sk, f, 0, status, null);
 
     [Fact]
     public void Multiple_projects_same_runId_returned_together()
@@ -150,5 +150,62 @@ public class StateStoreSyncRunTests : IDisposable
         var all = _store.GetFileDetails("run-1");
         Assert.Equal(FileOutcome.Success, all.Single(d => d.RelPath == "created.md").Outcome);
         Assert.DoesNotContain(_store.GetFailedOrSkipped("run-1"), d => d.RelPath == "created.md");
+    }
+
+    // ============== Deleted（删除同步计数与旧库迁移） ==============
+
+    [Fact]
+    public void Deleted_count_roundtrips()
+    {
+        var t = new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc);
+        _store.RecordSyncRun(new SyncRunRecord("run-d", t, t.AddMinutes(1), "A", 0, 0, 0, 2, RunStatus.Success, null));
+        var latest = _store.GetLatestRunByRunId();
+        Assert.Equal(2, Assert.Single(latest).DeletedCount);
+        var listed = _store.ListSyncRuns(10, 0);
+        Assert.Equal(2, Assert.Single(listed).DeletedCount);
+    }
+
+    [Fact]
+    public void Old_db_without_deleted_count_column_migrates_on_open()
+    {
+        // 直接建旧结构库（无 deleted_count），再开 StateStore 触发迁移
+        var oldDir = Path.Combine(Path.GetTempPath(), "sye-mig-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(oldDir);
+        try
+        {
+            var db = Path.Combine(oldDir, "state.db");
+            using (var raw = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={db}"))
+            {
+                raw.Open();
+                using var cmd = raw.CreateCommand();
+                cmd.CommandText = @"CREATE TABLE sync_run (
+              id INTEGER PRIMARY KEY AUTOINCREMENT, run_id TEXT NOT NULL, started_at TEXT NOT NULL,
+              finished_at TEXT NOT NULL, project_name TEXT NOT NULL, success_count INTEGER NOT NULL,
+              skipped_count INTEGER NOT NULL, failed_count INTEGER NOT NULL, status TEXT NOT NULL, error TEXT);";
+                cmd.ExecuteNonQuery();
+            }
+            using (var store = new StateStore(db))   // 构造函数执行幂等迁移
+            {
+                var t = new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc);
+                store.RecordSyncRun(new SyncRunRecord("r", t, t, "A", 0, 0, 0, 1, RunStatus.Success, null));
+                Assert.Equal(1, Assert.Single(store.GetLatestRunByRunId()).DeletedCount);
+            }
+        }
+        finally { try { Directory.Delete(oldDir, true); } catch { } }
+    }
+
+    [Fact]
+    public void GetFailedOrSkipped_includes_deleted_rows()
+    {
+        var t = new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc);
+        _store.RecordSyncRun(new SyncRunRecord("run-x", t, t, "A", 0, 0, 0, 0, RunStatus.Success, null));
+        _store.RecordFileDetails("run-x", "A", new[]
+        {
+            new FileResult("gone.md", FileOutcome.Deleted, null),
+            new FileResult("keep.md", FileOutcome.Skipped, "未满静默期（剩余约 3 分钟）"),
+        });
+        var rows = _store.GetFailedOrSkipped("run-x");
+        Assert.Equal(2, rows.Count);
+        Assert.Contains(rows, r => r.Outcome == FileOutcome.Deleted);
     }
 }

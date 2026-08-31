@@ -24,6 +24,18 @@ public sealed class StateStore : IStateStore
         using (var cmd = c.CreateCommand()) { cmd.CommandText = StateSchema.FileSyncState; cmd.ExecuteNonQuery(); }
         using (var cmd = c.CreateCommand()) { cmd.CommandText = StateSchema.SyncRun; cmd.ExecuteNonQuery(); }
         using (var cmd = c.CreateCommand()) { cmd.CommandText = StateSchema.FileRunDetail; cmd.ExecuteNonQuery(); }
+        MigrateSyncRunDeletedCount(c);
+    }
+
+    /// <summary>旧库 sync_run 无 deleted_count 列时幂等补列（新建库建表已含，探测即跳过）。</summary>
+    private static void MigrateSyncRunDeletedCount(Microsoft.Data.Sqlite.SqliteConnection c)
+    {
+        using var probe = c.CreateCommand();
+        probe.CommandText = "SELECT COUNT(*) FROM pragma_table_info('sync_run') WHERE name='deleted_count'";
+        if (Convert.ToInt32(probe.ExecuteScalar()) > 0) return;
+        using var alter = c.CreateCommand();
+        alter.CommandText = "ALTER TABLE sync_run ADD COLUMN deleted_count INTEGER NOT NULL DEFAULT 0;";
+        alter.ExecuteNonQuery();
     }
 
     internal SqliteConnection OpenConnection()
@@ -100,8 +112,8 @@ ON CONFLICT(project_name, rel_path) DO UPDATE SET
         cmd.Transaction = tx;
         cmd.CommandText = @"
 INSERT INTO sync_run (run_id, started_at, finished_at, project_name,
-  success_count, skipped_count, failed_count, status, error)
-VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@st,@e);";
+  success_count, skipped_count, failed_count, deleted_count, status, error)
+VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@dc,@st,@e);";
         cmd.Parameters.AddWithValue("@run", r.RunId);
         cmd.Parameters.AddWithValue("@s", r.StartedAt.ToString("O"));
         cmd.Parameters.AddWithValue("@f", r.FinishedAt.ToString("O"));
@@ -109,6 +121,7 @@ VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@st,@e);";
         cmd.Parameters.AddWithValue("@sc", r.SuccessCount);
         cmd.Parameters.AddWithValue("@sk", r.SkippedCount);
         cmd.Parameters.AddWithValue("@fc", r.FailedCount);
+        cmd.Parameters.AddWithValue("@dc", r.DeletedCount);
         cmd.Parameters.AddWithValue("@st", r.Status.ToString());
         cmd.Parameters.AddWithValue("@e", (object?)r.Error ?? DBNull.Value);
         cmd.ExecuteNonQuery();
@@ -125,7 +138,7 @@ VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@st,@e);";
         if (runId is null) return Array.Empty<SyncRunRecord>();
 
         using var cmd = c.CreateCommand();
-        cmd.CommandText = "SELECT run_id, started_at, finished_at, project_name, success_count, skipped_count, failed_count, status, error FROM sync_run WHERE run_id=@run ORDER BY project_name";
+        cmd.CommandText = "SELECT run_id, started_at, finished_at, project_name, success_count, skipped_count, failed_count, deleted_count, status, error FROM sync_run WHERE run_id=@run ORDER BY project_name";
         cmd.Parameters.AddWithValue("@run", runId);
         var list = new List<SyncRunRecord>();
         using (var r = cmd.ExecuteReader())
@@ -147,7 +160,7 @@ VALUES (@run,@s,@f,@p,@sc,@sk,@fc,@st,@e);";
         using var cmd = c.CreateCommand();
         // 外层同样拼过滤条件（项目筛选必须作用于返回行，否则会带出同轮其他项目）
         cmd.CommandText = $@"
-SELECT run_id, started_at, finished_at, project_name, success_count, skipped_count, failed_count, status, error
+SELECT run_id, started_at, finished_at, project_name, success_count, skipped_count, failed_count, deleted_count, status, error
 FROM sync_run
 WHERE run_id IN (
   SELECT run_id FROM sync_run{whereSql}
@@ -170,9 +183,9 @@ ORDER BY started_at DESC, project_name;";
         new(r.GetString(0),
             DateTime.Parse(r.GetString(1), null, System.Globalization.DateTimeStyles.RoundtripKind),
             DateTime.Parse(r.GetString(2), null, System.Globalization.DateTimeStyles.RoundtripKind),
-            r.GetString(3), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6),
-            Enum.Parse<RunStatus>(r.GetString(7)),
-            r.IsDBNull(8) ? null : r.GetString(8));
+            r.GetString(3), r.GetInt32(4), r.GetInt32(5), r.GetInt32(6), r.GetInt32(7),
+            Enum.Parse<RunStatus>(r.GetString(8)),
+            r.IsDBNull(9) ? null : r.GetString(9));
 
     public void RecordFileDetails(string runId, string projectName, IEnumerable<FileResult> files)
     {
@@ -206,10 +219,10 @@ VALUES (@run, @p, @r, @o, @e);";
     {
         using var c = OpenConnection();
         using var cmd = c.CreateCommand();
-        // 成功类含 Created/Updated/legacy Success，用 IN 白名单排除，避免新枚举混入失败/跳过明细
+        // 成功类含 Created/Updated/legacy Success，Deleted 属重要操作须显眼
         cmd.CommandText = $@"
 SELECT project_name, rel_path, outcome, error FROM file_run_detail
-WHERE run_id=@run{(excludeSuccess ? " AND outcome IN ('Skipped', 'Failed')" : "")}
+WHERE run_id=@run{(excludeSuccess ? " AND outcome IN ('Skipped', 'Failed', 'Deleted')" : "")}
 ORDER BY project_name, rel_path;";
         cmd.Parameters.AddWithValue("@run", runId);
         var list = new List<FileRunDetail>();

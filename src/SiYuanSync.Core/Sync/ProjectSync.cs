@@ -13,41 +13,41 @@ public static class ProjectSync
         ILogger logger, CancellationToken ct)
     {
         var files = new List<FileResult>();
-        int ok = 0, skipped = 0, failed = 0;
+        int ok = 0, skipped = 0, failed = 0, deleted = 0;
 
         // 1. docPath
         string docPath;
         try { docPath = PathNormalizer.NormalizeDocPath(project.DocPath); }
         catch (PathNormalizerException e)
-        { return Failed(project, $"docPath 无效：{e.Message}", files, 0, 0, 0); }
+        { return Failed(project, $"docPath 无效：{e.Message}", files, 0, 0, 0, 0); }
 
         // 2. notebook
         IReadOnlyList<Notebook> notebooks;
         try { notebooks = await siyuan.ListNotebooksAsync(ct); }
-        catch (SiyuanAuthException e) { return Failed(project, $"鉴权失败：{e.Message}", files, 0, 0, 0); }
-        catch (Exception e) { return Failed(project, $"获取笔记本失败：{e.Message}", files, 0, 0, 0); }
+        catch (SiyuanAuthException e) { return Failed(project, $"鉴权失败：{e.Message}", files, 0, 0, 0, 0); }
+        catch (Exception e) { return Failed(project, $"获取笔记本失败：{e.Message}", files, 0, 0, 0, 0); }
 
         var nb = notebooks.FirstOrDefault(n => n.Name == project.Notebook);
-        if (nb is null) return Failed(project, $"笔记本 '{project.Notebook}' 不存在或已关闭", files, 0, 0, 0);
+        if (nb is null) return Failed(project, $"笔记本 '{project.Notebook}' 不存在或已关闭", files, 0, 0, 0, 0);
 
         // 3. parentPath 规范化 + 存在校验
         string parentPath;
         try { parentPath = PathNormalizer.NormalizeParentPath(project.ParentPath); }
         catch (PathNormalizerException e)
-        { return Failed(project, $"parentPath 无效：{e.Message}", files, 0, 0, 0); }
+        { return Failed(project, $"parentPath 无效：{e.Message}", files, 0, 0, 0, 0); }
 
         IReadOnlyList<string> parentIds;
         try { parentIds = await siyuan.GetDocIdsByHPathAsync(nb.Id, parentPath, ct); }
-        catch (SiyuanAuthException e) { return Failed(project, $"鉴权失败：{e.Message}", files, 0, 0, 0); }
-        catch (Exception e) { return Failed(project, $"校验父目录失败：{e.Message}", files, 0, 0, 0); }
+        catch (SiyuanAuthException e) { return Failed(project, $"鉴权失败：{e.Message}", files, 0, 0, 0, 0); }
+        catch (Exception e) { return Failed(project, $"校验父目录失败：{e.Message}", files, 0, 0, 0, 0); }
 
         if (parentIds.Count == 0)
-            return Failed(project, $"思源中父目录 '{parentPath}' 不存在，请先点[同步创建父目录]", files, 0, 0, 0);
+            return Failed(project, $"思源中父目录 '{parentPath}' 不存在，请先点[同步创建父目录]", files, 0, 0, 0, 0);
 
         // 4. 扫描
         ScanResult scan;
         try { scan = DocScanner.Scan(docPath); }
-        catch (Exception e) { return Failed(project, $"扫描目录失败：{e.Message}", files, 0, 0, 0); }
+        catch (Exception e) { return Failed(project, $"扫描目录失败：{e.Message}", files, 0, 0, 0, 0); }
 
         foreach (var se in scan.Errors)
         {
@@ -114,7 +114,7 @@ public static class ProjectSync
             {
                 files.Add(new FileResult(rel, FileOutcome.Failed, $"鉴权失败，停止本项目后续文件：{e.Message}"));
                 failed++;
-                return Failed(project, $"鉴权失败：{e.Message}", files, ok, skipped, failed);
+                return Failed(project, $"鉴权失败：{e.Message}", files, ok, skipped, failed, deleted);
             }
             catch (OperationCanceledException) { throw; }
             catch (Exception e)
@@ -137,7 +137,7 @@ public static class ProjectSync
         }
 
         var status = failed > 0 ? (ok > 0 ? RunStatus.Partial : RunStatus.Failed) : RunStatus.Success;
-        return new ProjectRunResult(project.Name, status, ok, skipped, failed, files, null);
+        return new ProjectRunResult(project.Name, status, ok, skipped, failed, deleted, files, null);
     }
 
     private static void PurgeMissing(ProjectConfig project, IStateStore state, HashSet<string> present)
@@ -148,6 +148,6 @@ public static class ProjectSync
                 state.DeleteFileSync(project.Name, rel);
     }
 
-    private static ProjectRunResult Failed(ProjectConfig p, string error, List<FileResult> files, int ok, int skipped, int failed) =>
-        new(p.Name, RunStatus.Failed, ok, skipped, failed, files, error);
+    private static ProjectRunResult Failed(ProjectConfig p, string error, List<FileResult> files, int ok, int skipped, int failed, int deleted) =>
+        new(p.Name, RunStatus.Failed, ok, skipped, failed, deleted, files, error);
 }
