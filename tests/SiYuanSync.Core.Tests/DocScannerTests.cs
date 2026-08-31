@@ -196,6 +196,56 @@ public class DocScannerTests : IDisposable
         Assert.Contains("a.md", r.PresentRels);
     }
 
+    [Fact]
+    public void Normal_scan_not_truncated()
+    {
+        Write("a.md");
+        Write("sub/b.md");
+        var r = DocScanner.Scan(_root);
+        Assert.False(r.ScanTruncated);
+        Assert.Equal(2, r.Files.Count);
+    }
+
+    /// <summary>拒 ACL 子目录制造真实枚举失败；应用失败（非 Windows/权限不足）则跳过——沿用本文件大小写用例的 best-effort 模式。</summary>
+    [Fact]
+    public void Deny_acl_subdir_sets_ScanTruncated()
+    {
+        if (!OperatingSystem.IsWindows()) return; // 非 Windows：跳过（同时满足 CA1416 平台守卫）
+
+        Write("root.md");
+        Write("locked/inner.md");
+        var locked = new DirectoryInfo(Path.Combine(_root, "locked"));
+        // sec/deny 提到 try 外声明，还原段才可见（deny 无合适 var 类型，显式 FileSystemAccessRule）
+        System.Security.AccessControl.DirectorySecurity sec;
+        System.Security.AccessControl.FileSystemAccessRule deny;
+        try
+        {
+            sec = locked.GetAccessControl();
+            deny = new System.Security.AccessControl.FileSystemAccessRule(
+                System.Security.Principal.WindowsIdentity.GetCurrent().User!,
+                System.Security.AccessControl.FileSystemRights.FullControl,
+                System.Security.AccessControl.AccessControlType.Deny);
+            sec.AddAccessRule(deny);
+            locked.SetAccessControl(sec);
+        }
+        catch (PlatformNotSupportedException) { return; } // 非 Windows / ACL 不可用：跳过
+        catch { return; } // 应用规则失败（权限等）：跳过
+
+        var r = DocScanner.Scan(_root);
+        Assert.True(r.ScanTruncated);
+        Assert.DoesNotContain(r.Files, f => f.RelPath == "locked/inner.md");
+        Assert.DoesNotContain("locked/inner.md", r.PresentRels);
+        Assert.Contains("root.md", r.PresentRels); // 未截断部分仍正常收集
+
+        // 还原 ACL，保证 Dispose 能清理临时目录
+        try
+        {
+            sec.RemoveAccessRule(deny);
+            locked.SetAccessControl(sec);
+        }
+        catch { }
+    }
+
     private static void TryEnableCaseSensitive(string dir)
     {
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;

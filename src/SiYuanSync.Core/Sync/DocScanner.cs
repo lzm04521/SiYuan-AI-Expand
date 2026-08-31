@@ -13,7 +13,9 @@ public static class DocScanner
         var present = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenHpathSuffix = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        foreach (var abs in EnumerateSupportedFiles(docPath))
+        // 截断信号：任一目录枚举被吞错即置位，PresentRels 视为不完整（删除同步据此整项目跳过）
+        bool truncated = false;
+        foreach (var abs in EnumerateSupportedFiles(docPath, () => truncated = true))
         {
             var rel = Path.GetRelativePath(docPath, abs).Replace('\\', '/');
             present.Add(rel); // 磁盘全集：无论后续是否被过滤/冲突/延迟，本地存在即入集
@@ -50,10 +52,10 @@ public static class DocScanner
 
         // 按相对路径正序（大小写不敏感）：同步顺序稳定，浅路径先于深路径（'.' < '/'），父文档先建
         files.Sort((x, y) => string.Compare(x.RelPath, y.RelPath, StringComparison.OrdinalIgnoreCase));
-        return new ScanResult(files, errors, filtered, deferred, present);
+        return new ScanResult(files, errors, filtered, deferred, present, truncated);
     }
 
-    private static IEnumerable<string> EnumerateSupportedFiles(string root)
+    private static IEnumerable<string> EnumerateSupportedFiles(string root, Action onTruncate)
     {
         var stack = new Stack<DirectoryInfo>();
         stack.Push(new DirectoryInfo(root));
@@ -65,8 +67,8 @@ public static class DocScanner
 
             IEnumerable<FileInfo> fis;
             try { fis = dir.EnumerateFiles(); }
-            catch (UnauthorizedAccessException) { yield break; }
-            catch { continue; }
+            catch (UnauthorizedAccessException) { onTruncate(); yield break; }
+            catch { onTruncate(); continue; }
 
             foreach (var fi in fis)
             {
@@ -78,7 +80,7 @@ public static class DocScanner
 
             DirectoryInfo[] subs;
             try { subs = dir.GetDirectories(); }
-            catch { continue; }
+            catch { onTruncate(); continue; }
             foreach (var sub in subs)
             {
                 if ((sub.Attributes & FileAttributes.ReparsePoint) != 0) continue;

@@ -13,7 +13,8 @@ public sealed record ScanResult(
     IReadOnlyList<FileScanError> Errors,
     IReadOnlyList<FileScanError> Filtered,   // 被正则排除：本地存在、不参与同步与冲突检测
     IReadOnlyList<FileScanError> Deferred,   // 未满静默期：本地存在、静默满后必然参与同步（参与冲突登记）
-    IReadOnlySet<string> PresentRels);       // 本地受支持文件 rel 全集（Files∪Filtered∪Deferred∪冲突Errors），删除阶段判定依据
+    IReadOnlySet<string> PresentRels,       // 本地受支持文件 rel 全集（Files ∪ Filtered ∪ Deferred ∪ 冲突Errors），删除阶段判定依据
+    bool ScanTruncated);                    // 扫描被截断（任一目录枚举被静默吞错）：PresentRels 不可信，删除阶段须整项目跳过
 
 public sealed class PathNormalizerException : Exception
 {

@@ -140,6 +140,10 @@ public static class ProjectSync
         {
             var stateRels = state.ListRelsByProject(project.Name);
 
+            // 扫描截断跳过（仅 DeleteSync=true）：枚举被吞错使 PresentRels 缺席子树，继续删除会违反"本地存在 ⇒ 绝不删除"
+            if (project.DeleteSync && scan.ScanTruncated)
+                return Failed(project, "扫描被截断（目录枚举失败），已跳过删除同步", files, ok, skipped, failed, deleted);
+
             // 空扫描熔断（仅 DeleteSync=true）：防 docPath 配错/盘未挂载导致整批误删
             if (project.DeleteSync && stateRels.Count > 0 && scan.PresentRels.Count == 0)
                 return Failed(project,
