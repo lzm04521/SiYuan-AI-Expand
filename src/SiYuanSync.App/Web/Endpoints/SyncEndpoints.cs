@@ -41,6 +41,7 @@ public static class SyncEndpoints
                 success = r.SuccessCount,
                 skipped = r.SkippedCount,
                 failed = r.FailedCount,
+                deleted = r.DeletedCount,
                 status = r.Status.ToString(),
                 error = r.Error
             }).ToList();
@@ -84,6 +85,7 @@ public static class SyncEndpoints
                     success = r.SuccessCount,
                     skipped = r.SkippedCount,
                     failed = r.FailedCount,
+                    deleted = r.DeletedCount,
                     status = r.Status.ToString(),
                     error = r.Error
                 }).ToList()
