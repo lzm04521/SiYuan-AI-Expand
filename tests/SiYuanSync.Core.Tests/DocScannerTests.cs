@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 using SiYuanSync.Core.Sync;
 
@@ -99,6 +100,100 @@ public class DocScannerTests : IDisposable
         var result = DocScanner.Scan(_root);
         Assert.Single(result.Files);
         Assert.NotEmpty(result.Errors);
+    }
+
+    private static ScanFilter Rx(string? inc = null, string? exc = null) =>
+        new(0,
+            inc is null ? null : new Regex(inc, RegexOptions.CultureInvariant),
+            exc is null ? null : new Regex(exc, RegexOptions.CultureInvariant));
+
+    [Fact]
+    public void Include_pattern_filters_non_matching_into_Filtered()
+    {
+        Write("keep/a.md");
+        Write("drop/b.md");
+        var r = DocScanner.Scan(_root, Rx(inc: @"^keep/"));
+        Assert.Single(r.Files, f => f.RelPath == "keep/a.md");
+        var fe = Assert.Single(r.Filtered);
+        Assert.Contains("includePattern", fe.Reason);
+        Assert.Contains("drop/b.md", r.PresentRels);
+    }
+
+    [Fact]
+    public void Exclude_pattern_hits_go_to_Filtered()
+    {
+        Write("a.md");
+        Write("b.tmp.md");
+        var r = DocScanner.Scan(_root, Rx(exc: @"\.tmp\.md$"));
+        Assert.Single(r.Files, f => f.RelPath == "a.md");
+        Assert.Single(r.Filtered, f => f.Reason.Contains("excludePattern"));
+    }
+
+    [Fact]
+    public void Include_then_exclude_both_apply()
+    {
+        Write("keep/a.md");
+        Write("keep/b.tmp.md");
+        var r = DocScanner.Scan(_root, Rx(inc: @"^keep/", exc: @"\.tmp\.md$"));
+        Assert.Single(r.Files);
+        Assert.Single(r.Filtered);
+    }
+
+    [Fact]
+    public void Regex_excluded_file_does_not_trigger_hpath_conflict()
+    {
+        // a.md 与 a.html 去后缀同名；a.md 被 include 排除后不构成冲突，a.html 正常收集
+        Write("a.md");
+        Write("a.html");
+        var r = DocScanner.Scan(_root, Rx(inc: @"\.html$"));
+        Assert.Empty(r.Errors);
+        Assert.Single(r.Files, f => f.RelPath == "a.html");
+    }
+
+    [Fact]
+    public void Deferred_file_still_registers_hpath_conflict()
+    {
+        Write("A.md"); Write("a.html");
+        File.SetLastWriteTimeUtc(Path.Combine(_root, "A.md"), DateTime.UtcNow); // 未满静默
+        var filter = new ScanFilter(10, null, null);
+        var r = DocScanner.Scan(_root, filter);
+        Assert.NotEmpty(r.Errors);           // 冲突仍暴露
+        Assert.NotEmpty(r.Deferred);         // A.md 进 Deferred
+    }
+
+    [Fact]
+    public void Recent_file_deferred_old_file_collected()
+    {
+        Write("old.md");
+        Write("new.md");
+        File.SetLastWriteTimeUtc(Path.Combine(_root, "old.md"), DateTime.UtcNow.AddMinutes(-30));
+        File.SetLastWriteTimeUtc(Path.Combine(_root, "new.md"), DateTime.UtcNow); // 刚写
+        var r = DocScanner.Scan(_root, new ScanFilter(10, null, null));
+        Assert.Single(r.Files, f => f.RelPath == "old.md");
+        var d = Assert.Single(r.Deferred);
+        Assert.Contains("静默期", d.Reason);
+        Assert.Contains("new.md", r.PresentRels);
+    }
+
+    [Fact]
+    public void Settle_zero_or_null_filter_keeps_current_behavior()
+    {
+        Write("fresh.md"); // mtime=now
+        Assert.Single(DocScanner.Scan(_root).Files);
+        Assert.Single(DocScanner.Scan(_root, new ScanFilter(0, null, null)).Files);
+    }
+
+    [Fact]
+    public void PresentRels_contains_conflict_files()
+    {
+        Write("A.md", "A"); Write("a.md", "a");
+        // 若 FS 仍是大小写不敏感（两条写入指向同一文件），跳过本用例
+        if (File.ReadAllText(Path.Combine(_root, "A.md")) == "a")
+            return;
+        var r = DocScanner.Scan(_root);
+        Assert.NotEmpty(r.Errors);
+        Assert.Contains("A.md", r.PresentRels);
+        Assert.Contains("a.md", r.PresentRels);
     }
 
     private static void TryEnableCaseSensitive(string dir)
