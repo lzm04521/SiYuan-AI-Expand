@@ -712,9 +712,18 @@ const AboutPage = {
 };
 
 /* ======================= 根实例 ======================= */
+// 侧边栏选项卡 id 白名单，同时是 hash 路由（#/<tabId>）的合法值集合
+const TAB_IDS = ['overview', 'projects', 'logs', 'settings', 'about'];
+
+// 从 location.hash 解析选项卡（#/projects → projects，容忍缺 /），非法或缺失回落 overview
+function tabFromHash() {
+  const id = (location.hash || '').replace(/^#\/?/, '');
+  return TAB_IDS.includes(id) ? id : 'overview';
+}
+
 const App = {
   data: () => ({
-    tab: 'overview',
+    tab: tabFromHash(),
     info: {},
     running: false,
     tabs: [
@@ -728,8 +737,19 @@ const App = {
   computed: {
     uptimeText() { return fmtUptime(this.info.uptimeSeconds); },
   },
+  created() {
+    // 空/非法 hash 规范化为 #/overview，保证复制链接直达行为一致
+    history.replaceState(null, '', '#/' + this.tab);
+    // 浏览器前进/后退时跟随 hash；点击侧边栏由 selectTab 写 hash 触发同一通路
+    addEventListener('hashchange', () => {
+      this.tab = tabFromHash();
+      // 非法 hash 回落时同步规范化 URL，保证地址栏与激活选项卡一致
+      if (location.hash !== '#/' + this.tab) history.replaceState(null, '', '#/' + this.tab);
+    });
+  },
   mounted() { this.loadInfo(); },
   methods: {
+    selectTab(id) { location.hash = '/' + id; },
     async loadInfo() {
       try { this.info = (await api.get('/api/system/info')) || {}; } catch { /* banner 显示 … 占位 */ }
     },

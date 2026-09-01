@@ -21,7 +21,7 @@
   </div>
   <div class="layout">
     <aside class="side">
-      <a v-for="t in tabs" :key="t.id" :class="{active: tab===t.id}" @click="tab=t.id">{{ t.name }}</a>
+      <a v-for="t in tabs" :key="t.id" :class="{active: tab===t.id}" :href="'#/'+t.id" @click.prevent="selectTab(t.id)">{{ t.name }}</a>
     </aside>
     <main>
       <overview-page v-if="tab==='overview'" :info="info" @running="onRunning" @idle="running=false"></overview-page>
