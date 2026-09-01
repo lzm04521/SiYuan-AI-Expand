@@ -16,6 +16,12 @@ public sealed class SetEnabledRequest
     public bool Enabled { get; set; }
 }
 
+/// <summary>POST /api/projects/init-parents 请求体。</summary>
+public sealed class InitParentsRequest
+{
+    public string[]? Names { get; set; }
+}
+
 public static class ProjectEndpoints
 {
     public static void Map(IEndpointRouteBuilder app, ConfigStore config, Func<SiyuanConnectionConfig, ISiyuanClient> clientFactory)
@@ -92,32 +98,52 @@ public static class ProjectEndpoints
             var siyuan = clientFactory(new(snap.Siyuan.ServerUrl, snap.Siyuan.Token));
             try
             {
-                string parentPath;
-                try { parentPath = PathNormalizer.NormalizeParentPath(p.ParentPath); }
-                catch (PathNormalizerException e) { throw new ApiException(400, "VALIDATION", "parentPath 无效", e.Message); }
-
-                var notebooks = await siyuan.ListNotebooksAsync(default);
-                var nbName = string.IsNullOrWhiteSpace(p.Notebook) ? snap.Siyuan.DefaultNotebook : p.Notebook;
-                var nb = notebooks.FirstOrDefault(n => n.Name == nbName) ?? throw new ApiException(400, "NOTEBOOK_MISSING", $"笔记本 '{nbName}' 不存在", null);
-
-                // 已存在？
-                var existing = await siyuan.GetDocIdsByHPathAsync(nb.Id, parentPath, default);
-                if (existing.Count > 0) return Results.Json(new { ok = true, created = false, message = "思源中已存在" });
-
-                // 逐级创建（处理是否自动建中间层级的不确定性）
-                var segments = parentPath.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                var path = "";
-                string createdId = "";
-                foreach (var seg in segments)
-                {
-                    path += "/" + seg;
-                    var ids = await siyuan.GetDocIdsByHPathAsync(nb.Id, path, default);
-                    if (ids.Count == 0)
-                        createdId = await siyuan.CreateDocWithMdAsync(nb.Id, path, "", default);
-                }
-                return Results.Json(new { ok = true, created = true, docId = createdId });
+                var r = await ParentDocInitializer.EnsureAsync(p, snap.Siyuan.DefaultNotebook, siyuan, default);
+                if (r.Status == ParentInitStatus.Failed)
+                    throw new ApiException(400, "INIT_FAILED", "创建父目录失败", r.Error);
+                return r.Status == ParentInitStatus.Exists
+                    ? Results.Json(new { ok = true, created = false, message = "思源中已存在" })
+                    : Results.Json(new { ok = true, created = true, docId = r.DocId });
             }
             catch (ApiException) { throw; }
+            catch (SiyuanAuthException) { throw new ApiException(401, "AUTH", "token 或权限无效", null); }
+            catch (Exception ex) { throw new ApiException(502, "UNREACHABLE", "思源不可达", ex.Message); }
+        });
+
+        // 批量创建父目录：逐项目隔离执行（单项失败不影响后续），auth 失败 401 整体终止（必然在首个项目触发）
+        app.MapPost("/api/projects/init-parents", async (InitParentsRequest body) =>
+        {
+            var names = (body.Names ?? [])
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (names.Count == 0) throw new ApiException(400, "VALIDATION", "names 不能为空", null);
+
+            var snap = config.GetSnapshot();
+            var missing = names.Where(n => !snap.Projects.Any(p => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToList();
+            if (missing.Count > 0) throw new ApiException(404, "NOT_FOUND", $"项目不存在：{string.Join(", ", missing)}", null);
+
+            var projects = names
+                .Select(n => snap.Projects.First(p => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            var siyuan = clientFactory(new(snap.Siyuan.ServerUrl, snap.Siyuan.Token));
+            try
+            {
+                var results = await ParentDocInitializer.EnsureAllAsync(projects, snap.Siyuan.DefaultNotebook, siyuan, default);
+                var payload = results.Select(r => new
+                {
+                    name = r.ProjectName,
+                    status = r.Status switch
+                    {
+                        ParentInitStatus.Created => "created",
+                        ParentInitStatus.Exists => "exists",
+                        _ => "failed"
+                    },
+                    docId = r.DocId,
+                    error = r.Error
+                });
+                return Results.Json(new { ok = true, results = payload });
+            }
             catch (SiyuanAuthException) { throw new ApiException(401, "AUTH", "token 或权限无效", null); }
             catch (Exception ex) { throw new ApiException(502, "UNREACHABLE", "思源不可达", ex.Message); }
         });

@@ -304,6 +304,21 @@ const ProjectsPage = {
         alert(r.created ? `已创建（docId=${r.docId || ''}）` : `已存在或无需创建：${r.message || ''}`);
       } catch (e) { alert('创建失败：' + e.message); }
     },
+    // 批量版：勾选多个项目一次性创建父目录；单项失败不影响其余（后端逐项隔离）
+    async initParents() {
+      const names = this.projects.filter((p) => this.selected[p.name]).map((p) => p.name);
+      if (!names.length) return;
+      if (!confirm(`将为选中的 ${names.length} 个项目按各自 parentPath 在思源中逐级创建缺失的父文档（已存在则跳过）。继续？`)) return;
+      try {
+        const r = await api.post('/api/projects/init-parents', { names });
+        const lines = [];
+        const by = (s) => r.results.filter((x) => x.status === s);
+        if (by('created').length) lines.push(`创建 ${by('created').length}：` + by('created').map((x) => x.name).join('、'));
+        if (by('exists').length) lines.push(`已存在 ${by('exists').length}：` + by('exists').map((x) => x.name).join('、'));
+        if (by('failed').length) lines.push(`失败 ${by('failed').length}：` + by('failed').map((x) => `${x.name}（${x.error || '未知原因'}）`).join('、'));
+        alert('批量创建父目录完成\n' + lines.join('\n'));
+      } catch (e) { alert('批量创建失败：' + e.message); }
+    },
   },
   template: `
   <div>
@@ -313,6 +328,7 @@ const ProjectsPage = {
       <template v-if="selectedCount">
         <button class="btn" @click="setEnabled(true)">批量启用</button>
         <button class="btn" @click="setEnabled(false)">批量停用</button>
+        <button class="btn" @click="initParents">批量创建父目录</button>
         <span class="result">已选 {{ selectedCount }} 项</span>
       </template>
     </div>
