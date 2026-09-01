@@ -136,12 +136,7 @@ const OverviewPage = {
     detailsFor(name) { return ((this.status && this.status.details) || []).filter((d) => d.project === name); },
     async toggleProject(p) {
       try {
-        await api.put('/api/projects/' + encodeURIComponent(p.name), {
-          name: p.name, docPath: p.docPath, notebook: p.notebook, parentPath: p.parentPath,
-          sortMode: p.sortMode, enabled: p.enabled === false,
-          settleMinutes: p.settleMinutes, includePattern: p.includePattern, excludePattern: p.excludePattern,
-          deleteSync: p.deleteSync === true,
-        });
+        await api.post('/api/projects/set-enabled', { names: [p.name], enabled: p.enabled === false });
         await this.refresh();
       } catch (e) { alert('操作失败：' + e.message); }
     },
@@ -213,7 +208,11 @@ const OverviewPage = {
 
 /* ======================= 项目页 ======================= */
 const ProjectsPage = {
-  data: () => ({ projects: [], editing: null, sortOptions: SORT_OPTIONS }),
+  data: () => ({ projects: [], editing: null, sortOptions: SORT_OPTIONS, selected: {}, maskDown: false }),
+  computed: {
+    selectedCount() { return Object.keys(this.selected).filter((k) => this.selected[k]).length; },
+    allSelected() { return this.projects.length > 0 && this.projects.every((p) => this.selected[p.name]); },
+  },
   mounted() { this.load(); },
   methods: {
     async load() {
@@ -221,7 +220,42 @@ const ProjectsPage = {
         const list = await api.get('/api/projects');
         this.projects = Array.isArray(list) ? list : [];
       } catch (e) { alert('加载失败：' + e.message); }
+      this.selected = {}; // 列表刷新后勾选状态作废（项目可能已增删改名）
     },
+    toggleSelectAll(e) {
+      const s = {};
+      if (e.target.checked) this.projects.forEach((p) => { s[p.name] = true; });
+      this.selected = s;
+    },
+    async setEnabled(enabled) {
+      const names = this.projects.filter((p) => this.selected[p.name]).map((p) => p.name);
+      if (!names.length) return;
+      try {
+        await api.post('/api/projects/set-enabled', { names, enabled });
+        await this.load();
+      } catch (e) { alert('操作失败：' + e.message); }
+    },
+    async toggleOne(p) {
+      try {
+        await api.post('/api/projects/set-enabled', { names: [p.name], enabled: p.enabled === false });
+        await this.load();
+      } catch (e) { alert('操作失败：' + e.message); }
+    },
+    // 过滤列概要：无任何正则返回 null；有则返回徽章文案与悬停详情（原生 title，\n 换行）
+    patternInfo(p) {
+      const inc = p.includePattern || '', exc = p.excludePattern || '';
+      if (!inc && !exc) return null;
+      const tag = (inc ? '含' : '') + (inc && exc ? '+' : '') + (exc ? '排' : '');
+      const lines = [];
+      if (inc) lines.push('包含: ' + inc);
+      if (exc) lines.push('排除: ' + exc);
+      return { tag, title: lines.join('\n') };
+    },
+    // 仅当 mousedown 起点也在遮罩空白处才允许 click 关闭；
+    // 从弹窗内控件（如正则框）拖选文本到遮罩上松开时，click 目标是公共祖先（遮罩），
+    // 但起点在控件内 → 不关闭（修复拖选导致弹窗误关）
+    onMaskDown(e) { this.maskDown = e.target === e.currentTarget; },
+    onMaskClick() { if (this.maskDown) this.close(); },
     openNew() {
       this.editing = { isNew: true, name: '', docPath: '', notebook: '', parentPath: '', sortMode: null, enabled: true,
         settleMinutes: '', includePattern: '', excludePattern: '', deleteSync: false };
@@ -276,30 +310,47 @@ const ProjectsPage = {
     <div class="toolbar">
       <button class="btn btn-primary" @click="openNew">新增项目</button>
       <button class="btn" @click="load">刷新</button>
+      <template v-if="selectedCount">
+        <button class="btn" @click="setEnabled(true)">批量启用</button>
+        <button class="btn" @click="setEnabled(false)">批量停用</button>
+        <span class="result">已选 {{ selectedCount }} 项</span>
+      </template>
     </div>
     <div class="card">
-      <table v-if="projects.length">
-        <thead><tr><th>名称</th><th>启用</th><th>docPath</th><th>笔记本</th><th>父路径</th><th>排序</th><th style="width:230px">操作</th></tr></thead>
+      <div class="table-wrap" v-if="projects.length">
+      <table>
+        <thead><tr>
+          <th style="width:34px"><input type="checkbox" :checked="allSelected" @change="toggleSelectAll"></th>
+          <th>名称</th><th>启用</th><th>删除同步</th><th>过滤</th><th>docPath</th><th>笔记本</th><th>父路径</th><th>排序</th><th style="width:300px">操作</th>
+        </tr></thead>
         <tbody>
           <tr v-for="p in projects" :key="p.name">
+            <td><input type="checkbox" v-model="selected[p.name]"></td>
             <td>{{ p.name }}</td>
             <td><span :class="p.enabled !== false ? 'badge badge-green' : 'badge badge-gray'">{{ p.enabled !== false ? '是' : '否' }}</span></td>
-            <td><code>{{ p.docPath }}</code></td>
+            <td><span :class="p.deleteSync ? 'badge badge-amber' : 'badge badge-gray'" :title="p.deleteSync ? '本地删除 → 思源对应文档删除（可从文件历史恢复）' : ''">{{ p.deleteSync ? '开' : '关' }}</span></td>
+            <td>
+              <span v-if="patternInfo(p)" class="badge badge-blue" :title="patternInfo(p).title">{{ patternInfo(p).tag }}</span>
+              <span v-else class="muted">—</span>
+            </td>
+            <td><code class="path-ellipsis" :title="p.docPath">{{ p.docPath }}</code></td>
             <td>{{ p.notebook || '' }}</td>
             <td>{{ p.parentPath || '' }}</td>
             <td>{{ sortModeLabel(p.sortMode) }}</td>
             <td>
               <button class="btn-link" @click="openEdit(p)">编辑</button>
+              <button class="btn-link" @click="toggleOne(p)">{{ p.enabled !== false ? '停用' : '启用' }}</button>
               <button class="btn-link" @click="initParent(p)">同步创建父目录</button>
               <button class="btn-link danger" @click="remove(p)">删除</button>
             </td>
           </tr>
         </tbody>
       </table>
+      </div>
       <p class="result-line" v-else>暂无项目，点击"新增项目"。</p>
     </div>
 
-    <div class="modal-mask" v-if="editing" @click.self="close">
+    <div class="modal-mask" v-if="editing" @mousedown="onMaskDown" @click.self="onMaskClick">
       <div class="modal">
         <h3>{{ editing.isNew ? '新增项目' : ('编辑项目：' + editing.name) }}</h3>
         <div class="form-row"><label>名称</label><input type="text" v-model="editing.name" :readonly="!editing.isNew"></div>
@@ -313,8 +364,8 @@ const ProjectsPage = {
           <span class="hint">需思源 ≥ v3.8.1</span>
         </div>
         <div class="form-row"><label>静默期(分)</label><input type="number" min="1" max="1440" v-model="editing.settleMinutes" placeholder="留空 = 立即同步"></div>
-        <div class="form-row"><label>包含正则</label><input type="text" v-model="editing.includePattern" placeholder="匹配相对路径(/分隔)，留空不启用"></div>
-        <div class="form-row"><label>排除正则</label><input type="text" v-model="editing.excludePattern" placeholder="匹配相对路径(/分隔)，留空不启用"></div>
+        <div class="form-row"><label>包含正则</label><input type="text" class="mono" v-model="editing.includePattern" placeholder="匹配相对路径(/分隔)，留空不启用"></div>
+        <div class="form-row"><label>排除正则</label><input type="text" class="mono" v-model="editing.excludePattern" placeholder="匹配相对路径(/分隔)，留空不启用"></div>
         <div class="form-row"><label>删除同步</label>
           <div class="switch-label"><div :class="['switch', editing.deleteSync ? 'on' : '']" @click="editing.deleteSync = !editing.deleteSync"></div>开启</div>
           <span class="hint">本地删除→思源旧文档删除（可从思源文件历史恢复）；首轮清理历史残留；排除正则的文件本地删除后同样会被清理</span>

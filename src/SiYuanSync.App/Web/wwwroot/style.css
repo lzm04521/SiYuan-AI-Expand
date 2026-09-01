@@ -95,10 +95,18 @@ code { font-family: Consolas, monospace; font-size: 12px; background: #f3f4f6; p
 
 /* 弹层（项目编辑） */
 .modal-mask { position: fixed; inset: 0; background: rgba(17, 24, 39, .45); display: flex; align-items: center; justify-content: center; z-index: 50; }
-.modal { background: #fff; border-radius: 8px; padding: 20px 24px; width: min(560px, 92vw); max-height: 86vh; overflow: auto; box-shadow: 0 12px 32px rgba(0, 0, 0, .2); }
+.modal { background: #fff; border-radius: 8px; padding: 20px 24px; width: min(780px, 94vw); max-height: 86vh; overflow: auto; box-shadow: 0 12px 32px rgba(0, 0, 0, .2); }
 .modal h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
-.modal .form-row > label { width: 110px; }
+.modal .form-row > label { width: 130px; }
+/* 弹窗内输入控件填满剩余宽度（设置页卡片内保持固定宽，不受影响） */
+.modal .form-row input[type=text], .modal .form-row input[type=password], .modal .form-row input[type=number], .modal .form-row select { flex: 1; width: auto; min-width: 0; }
 .modal .form-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+/* 项目列表：删除同步警示徽章 / 路径截断 / 空占位 / 宽表横向滚动 */
+.badge-amber { background: #fef3c7; color: #b45309; }
+.path-ellipsis { display: inline-block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.muted { color: #9ca3af; }
+.table-wrap { overflow-x: auto; }
 
 /* 筛选行（日志页） */
 .filters { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }

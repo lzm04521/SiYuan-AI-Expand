@@ -9,6 +9,13 @@ using SiYuanSync.Core.Sync;
 
 namespace SiYuanSync.App.Web.Endpoints;
 
+/// <summary>POST /api/projects/set-enabled 请求体。</summary>
+public sealed class SetEnabledRequest
+{
+    public string[]? Names { get; set; }
+    public bool Enabled { get; set; }
+}
+
 public static class ProjectEndpoints
 {
     public static void Map(IEndpointRouteBuilder app, ConfigStore config, Func<SiyuanConnectionConfig, ISiyuanClient> clientFactory)
@@ -49,6 +56,30 @@ public static class ProjectEndpoints
                 c.Projects.RemoveAt(i); removed = true;
             });
             return Results.Json(new { ok = removed });
+        });
+
+        // 批量/单个设置启用状态：一次事务只改 Enabled，避免前端拼完整对象整替（并发覆盖 + N 次写盘）。
+        // 用 POST 字面段而非 PUT /api/projects/enabled，避免与 PUT /api/projects/{name} 参数段产生
+        // "项目名恰好等于字面段时被截胡"的边界冲突。
+        app.MapPost("/api/projects/set-enabled", (SetEnabledRequest body) =>
+        {
+            var names = (body.Names ?? [])
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (names.Count == 0) throw new ApiException(400, "VALIDATION", "names 不能为空", null);
+            try
+            {
+                config.Update(c =>
+                {
+                    var missing = names.Where(n => !c.Projects.Any(p => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase))).ToList();
+                    if (missing.Count > 0) throw new ApiException(404, "NOT_FOUND", $"项目不存在：{string.Join(", ", missing)}", null);
+                    foreach (var n in names)
+                        c.Projects.First(p => p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)).Enabled = body.Enabled;
+                });
+                return Results.Json(new { ok = true, count = names.Count });
+            }
+            catch (ConfigValidationException ex) { throw new ApiException(400, "VALIDATION", "项目校验失败", string.Join("; ", ex.Errors)); }
         });
 
         app.MapPost("/api/projects/{name}/init-parent", async (string name) =>
