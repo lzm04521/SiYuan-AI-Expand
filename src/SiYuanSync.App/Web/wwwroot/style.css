@@ -20,7 +20,7 @@ body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #f5f7
 /* 左导航 + 右内容 */
 .layout { flex: 1; display: flex; min-height: 0; }
 .side { width: 176px; flex-shrink: 0; background: #fff; border-right: 1px solid #e5e7eb; padding: 12px 8px; display: flex; flex-direction: column; gap: 4px; }
-.side a { padding: 10px 14px; border-radius: 6px; color: #4b5563; cursor: pointer; }
+.side a { padding: 10px 14px; border-radius: 6px; color: #4b5563; cursor: pointer; text-decoration: none; }
 .side a:hover { background: #f3f4f6; }
 .side a.active { background: #eff6ff; color: #2563eb; font-weight: 600; }
 main { flex: 1; min-width: 0; padding: 20px 24px; overflow: auto; }
